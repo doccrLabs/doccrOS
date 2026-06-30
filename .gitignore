@@ -1,0 +1,9 @@
+# Code editor / IDE specific
+.vscode
+
+# Build output
+build/
+
+.DS_Store
+**/.DS_Store
+.zig-cache/
