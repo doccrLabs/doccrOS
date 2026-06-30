@@ -19,7 +19,7 @@
 
 __attribute__((noreturn)) void panic(const char *message)
 {
-    clear(PANICSCREEN_BG_COLOR);
+    clear(BS1, PANICSCREEN_BG_COLOR);
     // Disable interrupts
     __asm__ volatile("cli");
 
@@ -42,7 +42,7 @@ __attribute__((noreturn)) void panic(const char *message)
 
 __attribute__((noreturn)) void panic_exception(cpu_state_t *state, const char *message)
 {
-    clear(PANICSCREEN_BG_COLOR);
+    clear(BS1, PANICSCREEN_BG_COLOR);
     // Disable interrupts
     __asm__ volatile("cli");
 

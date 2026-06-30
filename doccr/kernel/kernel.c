@@ -10,6 +10,7 @@
  *
  */
 
+#include "screen/bootscreen/boot.h"
 #include <kernel/arch/hal/assembly.h>
 #include <kernel/limine/reqs.h>
 #include <kernel/include/logo.h>
@@ -52,6 +53,7 @@ void _start(void)
     // Initialize framebuffer graphics
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     graphics_init(fb);
+    init_bootscreen();
     draw_logo();
 
     // main kernel

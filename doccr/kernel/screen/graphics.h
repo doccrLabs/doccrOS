@@ -19,6 +19,8 @@
 #include <kernel/screen/lib/print.h>
 #include <kernel/screen/lib/string.h>
 
+#include <kernel/screen/bootscreen/boot.h>
+
 extern u32 *framebuffer;
 extern u32 fb_width;
 extern u32 fb_height;
@@ -39,7 +41,8 @@ u32* get_framebuffer(void);
 u32 get_fb_pitch(void);
 
 void reset_cursor(void);
-void clear(u32 color);
+#define FB_RAW -1
+void clear(int screen, u32 color);
 void scroll_up(u32 lines);
 
 void set_font_scale(u32 scale);

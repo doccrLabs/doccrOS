@@ -12,7 +12,6 @@
 
 #include "graphics.h"
 #include <kernel/screen/font_8x8.h>
-#include <kernel/screen/bootscreen/boot.h>
 
 //donnot put static before the uints!
 u32 *framebuffer = NULL;
@@ -45,13 +44,20 @@ void graphics_init(struct limine_framebuffer *fb)
     print(res_buf, white());
 }
 
-void clear(u32 color)
+void clear(int screen, u32 color)
 {
-    u32 w = get_fb_width();
-    u32 h = get_fb_height();
-    draw_rect(0, 0, w, h, color);
-    reset_cursor();
-    //print(" ", COLOR_BG);
+    if (screen == FB_RAW)
+    {
+        u32 w = get_fb_width();
+        u32 h = get_fb_height();
+        draw_rect(0, 0, w, h, color);
+        reset_cursor();
+        return;
+    }
+
+    bs_clear_screen(screen, color);
+    bs_screens[screen].cursor_y = 0;
+    bs_screens[screen].cursor_x = 0;
 }
 
 void scroll_up(u32 lines)

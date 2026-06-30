@@ -11,80 +11,338 @@
  */
 
 #include "print.h"
+#include "../bootscreen/boot.h"
+#include "log.h"
 #include <kernel/screen/graphics.h>
-#include <kernel/screen/font_8x8.h>
+#include <kernel/mem/meminclude.h>
+#include <kernel/communication/serial.h>
 
-static void putchar_at(char c, u32 x, u32 y, u32 color)
+
+// made by Dexoron Feb. 18, 2026
+// Decode one UTF-8 sequence and return pointer to next byte.
+// On invalid data, returns '?' and advances by one byte.
+static const char *utf8_next_codepoint(const char *p, u32 *codepoint)
 {
-    const u8 *glyph = font_8x8[(u8)c];
+    if (!p || !codepoint) return p;
 
-    for (int dy = 0; dy < 8; dy++)
+    unsigned char b0 = (unsigned char)p[0];
+    if (b0 == 0) {
+        *codepoint = 0;
+        return p;
+    }
+
+    // 1-byte ASCII: 0xxxxxxx
+    if ((b0 & 0x80) == 0) {
+        *codepoint = b0;
+        return p + 1;
+    }
+
+    // Continuation byte as lead is invalid.
+    if ((b0 & 0xC0) == 0x80) {
+        *codepoint = '?';
+        return p + 1;
+    }
+
+    // 2-byte: 110xxxxx 10xxxxxx
+    if ((b0 & 0xE0) == 0xC0) {
+        unsigned char b1 = (unsigned char)p[1];
+        if ((b1 & 0xC0) != 0x80) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        u32 cp = ((u32)(b0 & 0x1F) << 6) | (u32)(b1 & 0x3F);
+        // Overlong encoding check: must be >= 0x80
+        if (cp < 0x80) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        *codepoint = cp;
+        return p + 2;
+    }
+
+    // 3-byte: 1110xxxx 10xxxxxx 10xxxxxx
+    if ((b0 & 0xF0) == 0xE0) {
+        unsigned char b1 = (unsigned char)p[1];
+        unsigned char b2 = (unsigned char)p[2];
+        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        u32 cp = ((u32)(b0 & 0x0F) << 12) |
+                 ((u32)(b1 & 0x3F) << 6)  |
+                 (u32)(b2 & 0x3F);
+        // Overlong and UTF-16 surrogate range checks
+        if (cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        *codepoint = cp;
+        return p + 3;
+    }
+
+    // 4-byte: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+    if ((b0 & 0xF8) == 0xF0) {
+        unsigned char b1 = (unsigned char)p[1];
+        unsigned char b2 = (unsigned char)p[2];
+        unsigned char b3 = (unsigned char)p[3];
+        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        u32 cp = ((u32)(b0 & 0x07) << 18) |
+                 ((u32)(b1 & 0x3F) << 12) |
+                 ((u32)(b2 & 0x3F) << 6) |
+                 (u32)(b3 & 0x3F);
+        // Valid Unicode scalar range: U+10000..U+10FFFF
+        if (cp < 0x10000 || cp > 0x10FFFF) {
+            *codepoint = '?';
+            return p + 1;
+        }
+
+        *codepoint = cp;
+        return p + 4;
+    }
+
+    *codepoint = '?';
+    return p + 1;
+}
+
+
+static u32 g_dirty_y0 = 0xFFFFFFFFu;
+static u32 g_dirty_y1 = 0;
+
+static void dirty_reset(void)
+{
+    g_dirty_y0 = 0xFFFFFFFFu;
+    g_dirty_y1 = 0;
+}
+static void dirty_mark(u32 y, u32 h)
+{
+    if (y < g_dirty_y0) g_dirty_y0 = y;
+    u32 end = y + h;
+    if (end > g_dirty_y1) g_dirty_y1 = end;
+}
+static void dirty_flush(void)
+{
+    if (g_dirty_y0 > g_dirty_y1) return;
+    bs_flush_rows(g_dirty_y0, g_dirty_y1 - g_dirty_y0);
+    dirty_reset();
+}
+
+#define BS_GLYPH_ROW_MAX 64
+
+
+static u32 g_scanline[BS_GLYPH_ROW_MAX];
+
+static void putchar_at(u32 codepoint, u32 x, u32 y, u32 color)
+{
+    u32 char_width  = fm_get_char_width();
+    u32 char_height = fm_get_char_height();
+    u32 row_bytes   = fm_get_glyph_row_bytes();
+    u32 lsb_left    = fm_get_glyph_lsb_left();
+    //u32 pitch_dwords = fb_pitch / 4;
+    u32 bg_color    = bg();
+
+    const u8 *glyph = fm_get_glyph_cp(codepoint);
+    if (!glyph) return;
+
+    u32 pdw     	= bs_backbuf_pitch_dw();
+    u32 *backbuf = bs_backbuf_get();
+    u32 glyph_w 	= char_width * font_scale;
+    u32 glyph_h 	= char_height * font_scale;
+
+    if (glyph_w > BS_GLYPH_ROW_MAX) glyph_w = BS_GLYPH_ROW_MAX;
+
+    bs_screen_t *scr = bs_get_active();
+
+    for (u32 dy = 0; dy < char_height; dy++)
     {
-        u8 row = glyph[dy];
-        for (int dx = 0; dx < 8; dx++)
+        u32 row_bits = 0;
+        const u8 *row_ptr = glyph + (dy * row_bytes);
+        if (row_bytes == 1) {
+            row_bits = row_ptr[0];
+        } else if (row_bytes == 2) {
+            row_bits = (u32)row_ptr[0] | ((u32)row_ptr[1] << 8);
+        } else if (row_bytes == 4) {
+            row_bits = (u32)row_ptr[0] | ((u32)row_ptr[1] << 8) |
+                       ((u32)row_ptr[2] << 16) | ((u32)row_ptr[3] << 24);
+        } else {
+            return;
+        }
+
+
+        for (u32 dx = 0; dx < char_width; dx++)
         {
-            if (row & (1 << (7 - dx)))
-            {
-                // Draw scaled pixel
-                for (u32 sy = 0; sy < font_scale; sy++) {
-                    for (u32 sx = 0; sx < font_scale; sx++) {
-                        putpixel(x + dx * font_scale + sx, y + dy * font_scale + sy, color);
-                    }
-                }
+            u32 bit_index   	= lsb_left ? dx : ((char_width - 1u) - dx);
+            u32 pixel_color 	= (row_bits & (1u << bit_index)) ? color : bg_color;
+            u32 base        	= dx * font_scale;
+            for (u32 sx = 0; sx < font_scale; sx++) g_scanline[base + sx] = pixel_color;
+        }
+        for (u32 sy = 0; sy < font_scale; sy++)
+        {
+            u32 abs_y = y + dy * font_scale + sy;
+            if (abs_y >= scr->height) break;
+            u32 copy_w = glyph_w;
+            if (x + copy_w > scr->width) {
+                if (x >= scr->width) break;
+                copy_w = scr->width - x;
             }
+            // write at local coords into the screen's own buffer
+            memcpy(
+            	backbuf + abs_y * pdw + x,
+                g_scanline,
+                copy_w * sizeof(u32)
+            );
         }
     }
+
+    /* shouldnt flush*/
+    dirty_mark(y, glyph_h);
+}
+
+static void bs_scroll(bs_screen_t *scr, u32 line_height)
+{
+    u32 pdw    = scr->width; // local buffer stride
+    u32 *buf   = scr->buffer;
+    u32 width  = scr->width;
+    u32 height = scr->height;
+
+    if (!buf || !pdw) return;
+
+    for (u32 y = 0; y < height - line_height; y++)
+    {
+        memcpy(
+            buf + y * pdw,
+            buf + (y + line_height) * pdw,
+            width * sizeof(u32)
+        );
+    }
+    for (u32 y = height - line_height; y < height; y++)
+    {
+        memset(buf + y * pdw, 0, width * sizeof(u32));
+    }
+
+    bs_flush_rect(0, 0, width, height);
+    //bs_backbuf_flush_all();
+
+    dirty_reset();
+}
+
+static void putcodepoint(u32 codepoint, u32 color)
+{
+	bs_screen_t *src = bs_get_active();
+	u32 region_w = src->width;
+	u32 region_h = src->height;
+    u32 char_width  = fm_get_char_width() * font_scale;
+    u32 char_height = fm_get_char_height() * font_scale;
+    u32 char_spacing = char_width;
+    u32 line_height = char_height + 2 * font_scale;
+
+    //log_printf(d, "CURSOR", "BEFORE y=%d\n", src->cursor_y);
+
+    if (codepoint == '\n')
+    {
+        src->cursor_x = 0;
+        src->cursor_y += line_height;
+        // scroll only once, right here
+        if (src->cursor_y + char_height > region_h) {
+        	bs_scroll(src, line_height);
+            src->cursor_y -= line_height;
+        }
+        //log_printf(d, "CURSOR", "AFTER y=%d\n", src->cursor_y);
+        return;
+    }
+
+    if (src->cursor_x + char_width >= region_w)
+    {
+        bs_get_active()->cursor_x = 0;
+        bs_get_active()->cursor_y += line_height;
+        // scroll only once, right here
+        if (src->cursor_y + char_height > region_h) {
+        	bs_scroll(src, line_height);
+            bs_get_active()->cursor_y -= line_height;
+        }
+    }
+
+    // removed the third redundant scroll check that was here before drawing
+    putchar_at(codepoint, bs_get_active()->cursor_x, bs_get_active()->cursor_y, color);
+    bs_get_active()->cursor_x += char_spacing;
 }
 
 void putchar(char c, u32 color)
 {
-    u32 char_width = 8 * font_scale;
-    u32 char_height = 8 * font_scale;
-    u32 char_spacing = char_width;
-    u32 line_height = char_height + 2 * font_scale;
+    putcodepoint((u32)(unsigned char)c, color);
 
-    if (c == '\n')
-    {
-        cursor_x = 20;
-        cursor_y += line_height;
-
-        return;
-    }
-
-    // Check if we need to wrap to next line
-    if (cursor_x + char_width >= fb_width)
-    {
-        cursor_x = 20;
-        cursor_y += line_height;
-    }
-
-    putchar_at(c, cursor_x, cursor_y, color);
-    cursor_x += char_spacing;
+    //dirty_flush();
 }
 
 void string(const char *str, u32 color)
 {
-    for (size_t i = 0; str[i]; i++)
-    {
-        putchar(str[i], color);
+	//bs_log_write(bs_active, str);
+    dirty_reset();
+    const char *p = str;
+    while (p && *p) {
+        u32 cp = 0;
+        p = utf8_next_codepoint(p, &cp);
+        if (cp == 0) break;
+        putcodepoint(cp, color);
     }
+
+    dirty_flush();
+    printf("%s", str); // prints everything from the os terminal to the host-terminal
+}
+
+void print_to(int screen, const char *str, u32 color)
+{
+	#if BOOTUP_VISUALS == 0
+		int old = bs_active;
+		bs_active = screen;
+		string(str,color);
+		bs_active = old;
+	#endif
+}
+
+void printInt_to(int screen, int value, u32 color)
+{
+	#if BOOTUP_VISUALS == 0
+	    char buffer[12];
+	    IntToString(value, buffer);
+
+	    int old = bs_active;
+	    bs_active = screen;
+
+	    string(buffer, color);
+
+	    bs_active = old;
+    #endif
 }
 
 void printInt(int value, u32 color)
 {
-    char buffer[12];
-    IntToString(value, buffer);
-    string(buffer, color);
+	#if BOOTUP_VISUALS == 0
+	    char buffer[12];
+	    IntToString(value, buffer);
+	    print_to(SCREENMODE, buffer, color);
+	#endif
+	//printf("%s", value);
 }
 
 void print(const char *str, u32 color)
 {
-    string(str, color);
-    //putchar('\n', color);
+	#if BOOTUP_VISUALS == 0
+    	print_to(SCREENMODE, str, color);
+     //putchar('\n', color);
+    #endif
+    //printf("%s", str);
 }
 
 void reset_cursor(void)
 {
-    cursor_x = 0;
-    cursor_y = 0;
+    bs_get_active()->cursor_x = 0;
+    bs_get_active()->cursor_y = 0;
 }
