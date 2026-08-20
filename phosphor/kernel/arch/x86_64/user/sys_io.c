@@ -200,7 +200,7 @@ void sys_write(cpu_state_t *state)
         of->offset
     );
 
-    if (written > 0) p->fd_table[fd].offset += (u64)written;
+    if (written > 0) of->offset += (u64)written;
 
     state->rax = (written < 0) ? (u64)-1 : (u64)written;
 }

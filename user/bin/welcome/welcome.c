@@ -48,7 +48,7 @@ static void draw_ui(void)
     ) {
         ui16_label(
             style(
-                font(fontBold),
+                font(fontPsf("/system/fonts/terminus/ter-powerline-v14b.psf")),
                 color(FG_COLOR)
             ),
             "Welcome to sulfurOS!"

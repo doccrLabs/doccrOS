@@ -43,6 +43,8 @@ typedef struct
     u32     visible; // when 0 it doesnt bother drawing
 
     u32     *pixels;      // this screens very own backbuffer, one u32 per pixel
+    u32 stride;
+    u32 direct;
     u32     pixel_count;  // width * height, cached so we dont keep remultiplying it
     u64     pixels_phys;
 

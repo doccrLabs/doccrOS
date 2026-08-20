@@ -93,10 +93,10 @@ void yield(void)
     syscall3(SYS_YIELD, 0, 0, 0);
 }
 
-__attribute__((noreturn)) void _exit(int code)
+void _exit(int code)
 {
     syscall3(SYS_EXIT, code, 0, 0);
-    //for (;;) __asm__ volatile("hlt");
+    for (;;) __asm__ volatile("hlt");
 }
 
 long lseek(int fd, long offset, int whence)

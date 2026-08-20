@@ -34,8 +34,15 @@ typedef enum
 {
     UI16_FONT_INHERIT,
     UI16_FONT_REGULAR,
-    UI16_FONT_BOLD
+    UI16_FONT_BOLD,
+    UI16_FONT_PSF
 } ui16_font_kind_t;
+
+typedef struct
+{
+    ui16_font_kind_t kind;
+    const char *path;
+} ui16_font_t;
 
 typedef enum
 {
@@ -83,7 +90,7 @@ typedef struct
     unsigned int border_color;
 
     ui16_layout_kind_t layout;
-    ui16_font_kind_t font;
+    ui16_font_t font;
 
     ui16_align_t align_items;
     ui16_justify_t justify_content;
@@ -118,10 +125,10 @@ typedef struct ui16_node_s
     int  box_width;
     int  box_height;
 
-    int  natural_width;
-    int  natural_height;
+    int natural_width;
+    int natural_height;
 
-    int  line_index;
+    int line_index;
 } ui16_node_t;
 
 typedef enum
@@ -163,7 +170,7 @@ typedef struct
         int  int_value;
 
         ui16_layout_kind_t layout_value;
-        ui16_font_kind_t font_value;
+        ui16_font_t font_value;
         ui16_align_t align_value;
         ui16_justify_t  justify_value;
         ui16_position_t position_value;
@@ -196,56 +203,64 @@ ui16_style_t ui16__applyMods(ui16_style_t base_style, const ui16_style_mod_t *mo
 #define margin(int_arg)     ((ui16_style_mod_t){ UI16_MOD_MARGIN,     .data.int_value = (int_arg) })
 #define gap(int_arg)        ((ui16_style_mod_t){ UI16_MOD_GAP,        .data.int_value = (int_arg) })
 #define radius(int_arg)     ((ui16_style_mod_t){ UI16_MOD_RADIUS,     .data.int_value = (int_arg) })
+
 #define border_width(px_arg) ((ui16_style_mod_t){ UI16_MOD_BORDER_WIDTH, .data.int_value = (px_arg) })
 #define border_color(color_arg) ((ui16_style_mod_t){ UI16_MOD_BORDER_COLOR, .data.color_value = (color_arg) })
 #define border(width_arg, color_arg) border_width(width_arg), border_color(color_arg)
-#define layout(layout_arg)  ((ui16_style_mod_t){ UI16_MOD_LAYOUT,     .data.layout_value = (layout_arg) })
-#define font(font_arg)      ((ui16_style_mod_t){ UI16_MOD_FONT,       .data.font_value = (font_arg) })
 
-#define align_items(v)     ((ui16_style_mod_t){ UI16_MOD_ALIGN_ITEMS,     .data.align_value = (v) })
+#define layout(layout_arg) ((ui16_style_mod_t){ UI16_MOD_LAYOUT, .data.layout_value = (layout_arg) })
+#define font(v) ((ui16_style_mod_t){ UI16_MOD_FONT, .data.font_value = (v) })
+
+// font modes like psf (in future maybe ttf ._. )
+#define fontPsf(path_arg) ((ui16_font_t){ UI16_FONT_PSF, (path_arg) })
+
+#define align_items(v) ((ui16_style_mod_t){ UI16_MOD_ALIGN_ITEMS, .data.align_value = (v) })
 #define justify_content(v) ((ui16_style_mod_t){ UI16_MOD_JUSTIFY_CONTENT, .data.justify_value = (v) })
-#define wrap(v)            ((ui16_style_mod_t){ UI16_MOD_WRAP,            .data.int_value = (v) })
+#define wrap(v) ((ui16_style_mod_t){ UI16_MOD_WRAP, .data.int_value = (v) })
 
 /* position/overlay */
-#define position(v)          ((ui16_style_mod_t){ UI16_MOD_POSITION, .data.position_value = (v) })
-#define left(px_arg)         ((ui16_style_mod_t){ UI16_MOD_LEFT,     .data.int_value = (px_arg) })
-#define top(px_arg)          ((ui16_style_mod_t){ UI16_MOD_TOP,      .data.int_value = (px_arg) })
-#define layer(int_arg)       ((ui16_style_mod_t){ UI16_MOD_LAYER,    .data.int_value = (int_arg) })
+#define position(v) ((ui16_style_mod_t){ UI16_MOD_POSITION, .data.position_value = (v) })
+#define left(px_arg) ((ui16_style_mod_t){ UI16_MOD_LEFT, .data.int_value = (px_arg) })
+#define top(px_arg) ((ui16_style_mod_t){ UI16_MOD_TOP, .data.int_value = (px_arg) })
+#define layer(int_arg) ((ui16_style_mod_t){ UI16_MOD_LAYER, .data.int_value = (int_arg) })
 
 /* sizes */
-#define px(pixel_amount)   ((ui16_size_t){ UI16_SIZE_PIXELS, (pixel_amount) })
+#define px(pixel_amount) ((ui16_size_t){ UI16_SIZE_PIXELS, (pixel_amount) })
 #define percent(percent_amount) ((ui16_size_t){ UI16_SIZE_PERCENT, (percent_amount) })
+
 #define fill     ((ui16_size_t){ UI16_SIZE_FILL, 0 })
 #define autosize ((ui16_size_t){ UI16_SIZE_AUTOSIZE, 0 })
 
 #define row    UI16_LAYOUT_ROW
 #define column UI16_LAYOUT_COLUMN
-#define fontInherit   UI16_FONT_INHERIT
-#define fontRegular   UI16_FONT_REGULAR
-#define fontBold      UI16_FONT_BOLD
+
+#define fontInherit ((ui16_font_t){ UI16_FONT_INHERIT, 0 })
+#define fontRegular ((ui16_font_t){ UI16_FONT_REGULAR, 0 })
+#define fontBold    ((ui16_font_t){ UI16_FONT_BOLD, 0 })
 
 #define alignStart   UI16_ALIGN_START
 #define alignCenter  UI16_ALIGN_CENTER
 #define alignEnd     UI16_ALIGN_END
 #define alignStretch UI16_ALIGN_STRETCH
 
-#define justifyStart  UI16_JUSTIFY_START
+#define justifyStart UI16_JUSTIFY_START
 #define justifyCenter UI16_JUSTIFY_CENTER
-#define justifyEnd    UI16_JUSTIFY_END
-#define spaceBetween  UI16_JUSTIFY_SPACE_BETWEEN
-#define spaceAround   UI16_JUSTIFY_SPACE_AROUND
-#define spaceEvenly   UI16_JUSTIFY_SPACE_EVENLY
+#define justifyEnd UI16_JUSTIFY_END
 
-#define positionStatic   UI16_POSITION_STATIC
+#define spaceBetween UI16_JUSTIFY_SPACE_BETWEEN
+#define spaceAround UI16_JUSTIFY_SPACE_AROUND
+#define spaceEvenly UI16_JUSTIFY_SPACE_EVENLY
+
+#define positionStatic  UI16_POSITION_STATIC
 #define positionAbsolute UI16_POSITION_ABSOLUTE
 
-#define wrapEnabled  1
+#define wrapEnabled 1
 #define wrapDisabled 0
 
 #define rgb(             \
-	        red_value,   \
-			green_value, \
-			blue_value   \
+            red_value,   \
+            green_value, \
+            blue_value   \
         ) (\
             0xFF000000u |\
             ((unsigned int)(red_value) << 16)  |\
@@ -281,9 +296,9 @@ ui16_node_t *ui16__labelStyled(ui16_style_t label_style, const char *label_text)
 #define UI16_ARG2(first_arg, second_arg, name_arg, ...) name_arg
 
 #define ui16_label(...) UI16_ARG2(\
-	                              __VA_ARGS__, \
-								  ui16__labelStyled, \
-								  ui16__labelSimple) \
+                                __VA_ARGS__, \
+                            ui16__labelStyled, \
+                            ui16__labelSimple) \
                         (__VA_ARGS__)
 
 void ui16_input(int mouse_x, int mouse_y, int mouse_down);

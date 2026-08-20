@@ -1,6 +1,17 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Copyright (c) 2026 sulfurLabs
+ *
+ * PROJECT: s4
+ * FILE: dt_ipc.h
+ */
+
 #pragma once
 
 #include <sys/types.h>
+
+#include "../s4/os.h" // sipc is in there
 
 #define DT_IPC_ROOT "/tmp/dt/"
 #define DT_IPC_PATH_MAX 64

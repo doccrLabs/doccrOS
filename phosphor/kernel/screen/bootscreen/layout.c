@@ -18,10 +18,10 @@ static char bs_buf_bs1[BS_BUF_SIZE];
 static char bs_buf_bs2[BS_BUF_SIZE];
 static char bs_buf_bs3[BS_BUF_SIZE];
 static char bs_buf_bs4[BS_BUF_SIZE];
-static u32 bs_pix_bs1[BS_MAX_PIXELS];
-static u32 bs_pix_bs2[BS_MAX_PIXELS];
-static u32 bs_pix_bs3[BS_MAX_PIXELS];
-static u32 bs_pix_bs4[BS_MAX_PIXELS];
+//static u32 bs_pix_bs1[BS_MAX_PIXELS];
+//static u32 bs_pix_bs2[BS_MAX_PIXELS];
+//static u32 bs_pix_bs3[BS_MAX_PIXELS];
+//static u32 bs_pix_bs4[BS_MAX_PIXELS];
 
 static void bs_size_clamp(u32 *width, u32 *height)
 {
@@ -53,8 +53,53 @@ static void bs_setup_screen
     bs.Screens[screen].width       = width;
     bs.Screens[screen].height      = height;
     bs.Screens[screen].pixels      = pixels;
+    bs.Screens[screen].stride      = width;
+    bs.Screens[screen].direct      = 0;
     bs.Screens[screen].pixels_phys = 0;
     bs.Screens[screen].pixel_count = width * height;
+}
+
+static void bs_setup_screen_direct
+(
+    int     screen,
+    char    *buffer,
+
+    u32  x,
+    u32  y,
+    u32  width,
+    u32  height
+) {
+    u32 fb_w = get_fb_width();
+    u32 fb_h = get_fb_height();
+    u32 fb_stride = get_fb_pitch() / 4;
+    u32 *fb = get_framebuffer();
+
+    if (x >= fb_w || y >= fb_h)
+    {
+        width  = 0;
+        height = 0;
+    }
+    else
+    {
+        if (x + width  > fb_w) width  = fb_w - x;
+        if (y + height > fb_h) height = fb_h - y;
+    }
+
+    bs.Screens[screen].cursor_x    = 0;
+    bs.Screens[screen].cursor_y    = 0;
+    bs.Screens[screen].buffer      = buffer;
+    bs.Screens[screen].x           = x;
+    bs.Screens[screen].y           = y;
+    bs.Screens[screen].width       = width;
+    bs.Screens[screen].height      = height;
+    bs.Screens[screen].stride      = fb_stride;
+    bs.Screens[screen].direct      = 1;
+    bs.Screens[screen].pixels_phys = 0;
+    bs.Screens[screen].pixel_count = width * height;
+    bs.Screens[screen].pixels = (fb && width && height)
+        ? (fb + (u64)y * fb_stride + x)
+        : NULL
+    ;
 }
 
 void bootscreen_layout_init(void)
@@ -70,22 +115,20 @@ void bootscreen_layout_init(void)
     bs.ScreensVisible(BS4, 1);
 
     // BS1 left
-    bs_setup_screen(
-        BS1, //screen
-        bs_pix_bs1, //pixels
-        bs_buf_bs1, // buffer
-        0,    //x
+    bs_setup_screen_direct(
+    	BS1, //screen
+      	bs_buf_bs1, // buffer
+       	0,    //x
         0,    //y
         half, // w
         fh    // h
     );
 
     // BS2 right
-    bs_setup_screen(
-        BS2,
-        bs_pix_bs2,
-        bs_buf_bs2,
-        half,
+    bs_setup_screen_direct(
+    	BS2,
+      	bs_buf_bs2,
+       	half,
         0,
         half,
         mid
@@ -93,21 +136,20 @@ void bootscreen_layout_init(void)
 
     // BS3 whole screen for fb0//tty
     bs_setup_screen(
-        BS3,
-        NULL,
-        bs_buf_bs3,
-        0,
+    	BS3,
+     	NULL,
+      	bs_buf_bs3,
+       	0,
         0,
         fw,
         fh
     );
 
     // BS4 also for userspace ig but idk
-    bs_setup_screen(
-        BS4,
-        bs_pix_bs4,
-        bs_buf_bs4,
-        half,
+    bs_setup_screen_direct(
+    	BS4,
+      	bs_buf_bs4,
+       	half,
         mid,
         half,
         fh - mid
@@ -127,9 +169,9 @@ void bootscreen_bs3_init_backbuffer(void)
     if (!phys)
     {
         log(
-            "[BOOT]",
-            "could not allocate BS3 backbuffer, fb0 will stay unavailable\n",
-            warning
+        	"[BOOT]",
+         	"could not allocate BS3 backbuffer, fb0 will stay unavailable\n",
+          	warning
         );
         return;
     }
@@ -138,11 +180,13 @@ void bootscreen_bs3_init_backbuffer(void)
 
     scr->pixels = (u32 *)(phys + hhdm);
     scr->pixels_phys = phys;
+    scr->stride = scr->width;
+    scr->direct = 0;
 
     memset(
-        scr->pixels,
-        0,
-        page_count * PAGE_SIZE
+    	scr->pixels,
+     	0,
+      	page_count * PAGE_SIZE
     );
 
     log("[BOOT]", "BS3 backbuffer ready\n", success);

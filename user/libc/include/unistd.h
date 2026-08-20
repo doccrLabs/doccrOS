@@ -87,6 +87,6 @@ int clock_gettime(int clock_id, struct timespec *timespec);
 
 long reboot(int cmd);
 
-__attribute__((noreturn)) void _exit(int code);
+void _exit(int code);
 
 #endif

@@ -34,7 +34,8 @@ COMMON_FLAGS += -I $(INCLUDE_DIR) -I $(SRC_DIR) -I phosphor/ -I $(SRC_DIR)/kerne
                 -I $(ARCH_DIR) \
                 -ffreestanding -fno-stack-protector -fno-lto \
                 -fno-PIE -fno-pic $(ARCH_FLAGS) \
-                -Wall -Wextra -Wpedantic -DARCH_$(ARCH_UPPER)
+                -Wall -Wextra -Wpedantic -DARCH_$(ARCH_UPPER) \
+                -mno-sse -mno-sse2
 
 CFLAGS ?= $(COMMON_FLAGS) -std=c23
 CXXFLAGS ?= $(COMMON_FLAGS) -std=c++17 -fno-exceptions -fno-rtti

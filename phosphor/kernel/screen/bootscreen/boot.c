@@ -23,7 +23,7 @@ static void bs_setpixel(bs_screen_t *scr, u32 x, u32 y, u32 color)
     if (!scr->pixels) return;
     if (x >= scr->width || y >= scr->height) return;
 
-    scr->pixels[y * scr->width + x] = color;
+    scr->pixels[y * scr->stride + x] = color;
 }
 
 
@@ -60,42 +60,43 @@ static void bs_draw_glyph(bs_screen_t *scr, char c, u32 color)
 static void bs_flush_rect(bs_screen_t *scr, u32 x, u32 y, u32 w, u32 h)
 {
     if (!scr->pixels) return;
+    if (scr->direct) return;
 
     u32 end_x = x + w;
     u32 end_y = y + h;
 
     if (end_x > scr->width)  end_x = scr->width;
     if (end_y > scr->height) end_y = scr->height;
+    if (x >= end_x || y >= end_y) return;
 
-    u32    *fb   = get_framebuffer();
-    u32    fb_w  = get_fb_width();
-    u32    fb_h  = get_fb_height();
-    u32    fb_stride = get_fb_pitch() / 4;
+    u32 *fb = get_framebuffer();
+    if (!fb) return;
 
-    if (
-    	fb &&
-     	scr->x == 0          &&
-      	scr->y == 0          &&
-       	scr->width == fb_w   &&
-        scr->height == fb_h
-    ) {
-        for (u32 yy = y; yy < end_y; yy++)
-        {
-            memcpy(
-            	&fb[yy * fb_stride + x],
-             	&scr->pixels[yy * scr->width + x],
-              	(end_x - x) * sizeof(u32)
-            );
-        }
-        return;
-    }
+    u32 fb_w      = get_fb_width();
+    u32 fb_h      = get_fb_height();
+    u32 fb_stride = get_fb_pitch() / 4;
 
-    for (u32 yy = y; yy < end_y; yy++)
+    u32 dst_x0 = scr->x + x;
+    u32 dst_y0 = scr->y + y;
+
+    if (dst_x0 >= fb_w || dst_y0 >= fb_h) return;
+
+    u32 copy_w = end_x - x;
+    if (dst_x0 + copy_w > fb_w) copy_w = fb_w - dst_x0;
+
+    u32 copy_rows = end_y - y;
+    if (dst_y0 + copy_rows > fb_h) copy_rows = fb_h - dst_y0;
+
+    for (u32 row = 0; row < copy_rows; row++)
     {
-        for (u32 xx = x; xx < end_x; xx++)
-        {
-            putpixel(scr->x + xx, scr->y + yy, scr->pixels[yy * scr->width + xx]);
-        }
+        u32 sy = y + row;
+        u32 dy = dst_y0 + row;
+
+        memcpy(
+            &fb[dy * fb_stride + dst_x0],
+            &scr->pixels[sy * scr->stride + x],
+            copy_w * sizeof(u32)
+        );
     }
 }
 
@@ -109,14 +110,19 @@ static void bs_clear_area(bs_screen_t *scr)
 {
     if (!scr->pixels) return;
 
-    for (u32 i = 0; i < scr->pixel_count; i++) scr->pixels[i] = black();
+    for (u32 row = 0; row < scr->height; row++)
+    {
+        u32 *r = scr->pixels + (u64)row * scr->stride;
+
+        for (u32 col = 0; col < scr->width; col++) r[col] = black();
+    }
 
     bs_flush(scr);
 }
 
 static void bs_scroll(bs_screen_t *scr)
 {
-    u32 scale = get_font_scale();
+    u32 scale  = get_font_scale();
     u32 line_h = 8 * scale + 2 * scale;
 
     if (!scr->pixels  || line_h >= scr->height)
@@ -130,18 +136,38 @@ static void bs_scroll(bs_screen_t *scr)
 
     u32 keep_rows = scr->height - line_h;
 
-    memmove
-    (
-        scr->pixels,
-        scr->pixels  + line_h * scr->width,
-        keep_rows * scr->width * sizeof(u32)
-    );
+    if (scr->stride == scr->width)
+    {
+        memmove
+        (
+            scr->pixels,
+            scr->pixels + (u64)line_h * scr->stride,
+            (u64)keep_rows * scr->width * sizeof(u32)
+        );
 
-    // black out the freshly exposed rows at the bottom
-    u32 *bottom      = scr->pixels + keep_rows * scr->width;
-    u32 bottom_len   = line_h * scr->width;
+        u32 *bottom      = scr->pixels + (u64)keep_rows * scr->stride;
+        u32 bottom_len   = line_h * scr->width;
 
-    for (u32 i = 0; i < bottom_len; i++) bottom[i] = black();
+        for (u32 i = 0; i < bottom_len; i++) bottom[i] = black();
+    }
+    else
+    {
+        for (u32 row = 0; row < keep_rows; row++)
+        {
+            memmove(
+                scr->pixels + (u64)row * scr->stride,
+                scr->pixels + (u64)(row + line_h) * scr->stride,
+                scr->width * sizeof(u32)
+            );
+        }
+
+        for (u32 row = keep_rows; row < scr->height; row++)
+        {
+            u32 *r = scr->pixels + (u64)row * scr->stride;
+
+            for (u32 col = 0; col < scr->width; col++) r[col] = black();
+        }
+    }
 
     bs_flush(scr);
 
@@ -149,7 +175,30 @@ static void bs_scroll(bs_screen_t *scr)
     scr->cursor_y = keep_rows;
 }
 
-static void bs_putchar(char c, u32 color)
+typedef struct
+{
+    u32 y0;
+    u32 y1;
+    int active;
+} bs_dirty_t;
+
+static void bs_dirty_add(bs_dirty_t *dirty, u32 y0, u32 y1)
+{
+    if (!dirty) return;
+
+    if (!dirty->active)
+    {
+        dirty->y0     = y0;
+        dirty->y1     = y1;
+        dirty->active = 1;
+        return;
+    }
+
+    if (y0 < dirty->y0) dirty->y0 = y0;
+    if (y1 > dirty->y1) dirty->y1 = y1;
+}
+
+static void bs_putchar_ex(char c, u32 color, int do_flush, bs_dirty_t *dirty)
 {
     bs_screen_t *scr = &bs.Screens[active_screen];
     if (!scr->visible) return;
@@ -159,11 +208,13 @@ static void bs_putchar(char c, u32 color)
         u32 char_w = 8 * scale;
         u32 char_h = 8 * scale;
         u32 line_h = char_h + 2 * scale;
+        int line_advanced = 0;
 
         if (c == '\n')
         {
             scr->cursor_x = 0;
             scr->cursor_y += line_h;
+            line_advanced = 1;
         }
         else
         {
@@ -171,23 +222,37 @@ static void bs_putchar(char c, u32 color)
             {
                 scr->cursor_x = 0;
                 scr->cursor_y += line_h;
+                line_advanced = 1;
             }
 
             bs_draw_glyph(scr, c, color);
-            bs_flush_rect(
-                scr,
-                scr->cursor_x,
-                scr->cursor_y,
-                char_w,
-                char_h
-            );
+
+            if (do_flush)
+            {
+                bs_flush_rect(
+                   	scr,
+                   	scr->cursor_x,
+                   	scr->cursor_y,
+                   	char_w,
+                    char_h
+                );
+            }
+            else
+            {
+                bs_dirty_add(dirty, scr->cursor_y, scr->cursor_y + char_h);
+            }
 
             scr->cursor_x += char_w;
         }
 
         if (
+            line_advanced &&
             scr->cursor_y + line_h >= scr->height
-        ) bs_scroll(scr);
+        ) {
+            bs_scroll(scr); // flushes the whole screen itself
+
+            if (dirty) dirty->active = 0;
+        }
 
         // keeps a copy in log from boot
         if (scr->buffer && scr->buf_len < BS_BUF_SIZE - 1)
@@ -198,14 +263,27 @@ static void bs_putchar(char c, u32 color)
     #endif
 }
 
+static void bs_putchar(char c, u32 color)
+{
+    bs_putchar_ex(c, color, 1, 0);
+}
+
 static void bs_print(const char *str, u32 color)
 {
+    bs_screen_t *scr = &bs.Screens[active_screen];
+    bs_dirty_t dirty = { 0, 0, 0 };
+
     for (
         size_t i = 0;
         str[i];
         i++
     ) {
-        bs_putchar(str[i], color);
+        bs_putchar_ex(str[i], color, 0, &dirty);
+    }
+
+    if (scr->visible && dirty.active)
+    {
+        bs_flush_rect(scr, 0, dirty.y0, scr->width, dirty.y1 - dirty.y0);
     }
 }
 
@@ -215,7 +293,8 @@ static void bs_putpixel(u32 x, u32 y, u32 color)
     if (!scr->visible) return;
 
     bs_setpixel(scr, x, y, color);
-    putpixel(scr->x + x, scr->y + y, color);
+
+    if (!scr->direct) putpixel(scr->x + x, scr->y + y, color);
 }
 
 static void bs_switch_screen(int screen)
@@ -272,9 +351,9 @@ void bootscreen_setup(void)
     bs.ScreensVisible     = bs_screens_visible;
     bs.Print              = bs_print;
     bs.Putchar            = bs_putchar;
-    bs.Clear              = bs_clear;
-    bs.Putpixel           = bs_putpixel;
-    bs.Flush              = bs_flush_screen;
+    bs.Clear               = bs_clear;
+    bs.Putpixel            = bs_putpixel;
+    bs.Flush               = bs_flush_screen;
 
     bs.Init();
 }

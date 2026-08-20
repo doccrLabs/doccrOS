@@ -25,4 +25,4 @@ double atof(const char *text);
 int abs(int value);
 char *getenv(const char *name);
 int system(const char *command);
-void exit(int status) __attribute__((noreturn));
+void exit(int status);

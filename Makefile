@@ -48,6 +48,9 @@ fetchDeps: doom-deps
 	@echo "[DEPS] Fetching Limine protocol header file"
 	@wget https://codeberg.org/Limine/limine-protocol/raw/branch/trunk/include/limine.h -O $(LIMINE_DIR)/limine.h
 
+	@chmod +x tools/buildtinygl.sh
+	@./tools/buildtinygl.sh
+
 disk:
 	@mkdir -p $(DISK_DIR)
 	@if [ -f $(DISK_IMG) ]; then \
@@ -79,12 +82,13 @@ $(ISO): limine.conf $(LIMINE_TOOL) doom-wad-check build_num $(BUILD_DIR)/kernel.
 	#copying binaries
 	@cp $(USERSPACE_DIR)/bin/system/sulfd.elf $(DISK_DIR)/rd/system/
 	@cp $(USERSPACE_DIR)/bin/hello/hello.elf $(DISK_DIR)/rd/bin/
-	@cp $(USERSPACE_DIR)/bin/doomgeneric/doomgeneric.elf $(DISK_DIR)/rd/bin/
+#@cp $(USERSPACE_DIR)/bin/doomgeneric/doomgeneric.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/poweroff/poweroff.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/reboot/reboot.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/template/template.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/welcome/welcome.elf $(DISK_DIR)/rd/system/desktop/
 	@cp $(USERSPACE_DIR)/bin/login/login.elf $(DISK_DIR)/rd/system/desktop/
+	@cp $(USERSPACE_DIR)/bin/gears/gears.elf $(DISK_DIR)/rd/system/desktop/
 	@cp "$(DOOM_WAD)" $(DISK_DIR)/rd/doom1.wad
 
 	@echo "[MK] creating initrd.cpio..."
