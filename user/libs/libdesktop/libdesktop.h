@@ -46,6 +46,7 @@ typedef struct
 #define DT_POPUP   0x01
 #define DT_NOMOVE  0x02
 #define DT_NOTITLE 0x04
+#define DT_NORESIZE 0x08
 
 #define DT_TITLE_H 18
 #define DT_BORDER   1

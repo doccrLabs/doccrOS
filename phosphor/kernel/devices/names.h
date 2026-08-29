@@ -30,7 +30,7 @@
 
 //TODO:
 // fkin multi vt's
-#define VT_ID_MOUNT "/dev/vt"
+#define VT_ID_MOUNT "/dev/vt/"
 #define VT_CTL_NAME "vt_ctl0"
 #define VT_CTL_MOUNT "/dev/vt/ctl" // control system for virtual terminals
 #define VT_CTL_VERSION VERSION_NUM(1, 0, 0, 0)

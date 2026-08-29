@@ -18,7 +18,7 @@
 #include <kernel/screen/graphics.h>
 #include <kernel/communication/serial.h>
 
-#define SULFD_PATH "/system/sulfd.elf"
+#define SULFD_PATH "/system/bin/sulfd.elf"
 #define SULFD_NAME "sulfd.elf"
 
 static void load_elf(const char *path, const char *name, u64 initial_caps)

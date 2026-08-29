@@ -15,7 +15,7 @@
 #include <kernel/screen/colors.h>
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
-#include <kernel/arch/x86_64/drivers/cmos/cmos.h>
+#include <drivers/x86_64/cmos/cmos.h>
 #include <kernel/communication/serial.h>
 
 // using PIT (8254)

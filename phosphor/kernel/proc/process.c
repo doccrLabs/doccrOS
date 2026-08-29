@@ -17,7 +17,10 @@
 #include <kernel/devices/device_init.h>
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
+#include <kernel/communication/serial.h>
 #include <kernel/user/fb.h>
+
+#include <kernel/arch/x86_64/fpu/fpu.h>
 
 extern void fork_child_return(void);
 
@@ -184,6 +187,7 @@ void process_exit(proc_t *p, int exit_code)
 
 void process_reap_zombies(void)
 {
+    /*
     u64 saved_flags;
     __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
 
@@ -217,6 +221,7 @@ void process_reap_zombies(void)
     }
 
     __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+    */
 }
 
 int process_waitpid(
@@ -224,6 +229,7 @@ int process_waitpid(
     i64 target_pid,
     int *exit_code_out
 ){
+    (void)parent;
     proc_t *cur       = proc_zombies;
     proc_t *prev      = NULL;
 
@@ -231,7 +237,7 @@ int process_waitpid(
     {
         int pid_match = (target_pid == -1)    || ((u64)target_pid == cur->pid);
 
-        if (pid_match)
+        if (pid_match && cur->thread_count == 0)
         {
             if (exit_code_out) *exit_code_out  = cur->exit_code;
 
@@ -313,6 +319,15 @@ proc_t *process_fork(cpu_state_t *parent_state)
     proc_t   *parent = process_get_current();
     thread_t *parent_thread = thread_get_current();
 
+    #if DEBUGINFO == 1
+        printf(
+            "[FORK] parent rip=0x%llx rsp=0x%llx rflags=0x%llx\n",
+            parent_state->rip,
+            parent_state->rsp,
+            parent_state->rflags
+        );
+    #endif
+
     if (!parent || !parent_thread) return NULL;
 
     proc_t *child = proc_alloc(parent->name);
@@ -364,16 +379,20 @@ proc_t *process_fork(cpu_state_t *parent_state)
         return NULL;
     }
 
+    fpu_init_state(ct->fpu_state);
+
     u8 *kstack = (u8 *)kmalloc(THREAD_STACK_SIZE);
     if (!kstack)
     {
         kfree((u64 *)ct);
         vmm_space_destroy(child->space);
         proc_t *cur = head, *prev = NULL;
-        while (cur) {
-            if (cur == child) {
+        while (cur)
+        {
+            if (cur == child)
+            {
                 if (prev) prev->next = cur->next;
-                else      head       = cur->next;
+                else head = cur->next;
                 break;
             }
             prev = cur; cur = cur->next;
@@ -436,6 +455,15 @@ proc_t *process_fork(cpu_state_t *parent_state)
     child->alive_count++;
 
     sched_add(ct);
+
+    #if DEBUGINFO == 1
+        printf(
+            "[FORK] child rip=0x%llx rsp=0x%llx rflags=0x%llx\n",
+            ct->fork_user_rip,
+            ct->fork_user_rsp,
+            ct->fork_user_rflags
+        );
+    #endif
 
     return child;
 }

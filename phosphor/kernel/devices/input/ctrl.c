@@ -12,6 +12,7 @@
 #include "kbd.h"
 #include "mouse.h"
 #include <kernel/screen/lib/log.h>
+#include <kernel/devices/vt/vt.h>
 
 void input_ctrl_init(void)
 {
@@ -46,9 +47,14 @@ void input_dispatch(const input_event_t *ev)
     {
         case INPUT_EV_KEY:
             if (ev->code >= INPUT_BTN_LEFT && ev->code <= INPUT_BTN_MIDDLE)
+            {
                 mouse_push_event(ev);
-            else
+            } else
+            {
                 kbd_push_event(ev);
+                if (ev->value != 0) vt_kbd_feed(ev->code, ev->modifiers);
+            }
+
             break;
 
         case INPUT_EV_REL:

@@ -166,7 +166,7 @@ vfs_node_t *vfs_mkdir(const char *path)
     return cur;
 }
 
-static void vfs_split_path(const char *path, char *dirpath_out, char *fname_out)
+void vfs_split_path(const char *path, char *dirpath_out, char *fname_out)
 {
     int len = str_len(path);
     int last_slash = -1;
@@ -190,44 +190,6 @@ static void vfs_split_path(const char *path, char *dirpath_out, char *fname_out)
         dirpath_out[i] = '\0';
         str_copy(fname_out, path + last_slash + 1);
     }
-}
-
-vfs_node_t *vfs_create_file(const char *path)
-{
-    if (!vfs_root || !path) return NULL;
-
-    char dirpath[VFS_MAX_PATH];
-    char fname[VFS_NAME_MAX];
-    vfs_split_path(path, dirpath, fname);
-
-    if (fname[0] == '\0') return NULL;
-
-    vfs_node_t *dir = vfs_find(dirpath);
-    if (!dir) dir = vfs_mkdir(dirpath); // THEN BUILD THAT DIR!!!
-    if (!dir) return NULL;
-
-    return vfs_create_node(dir, fname, VFS_FILE);
-}
-
-vfs_node_t *vfs_create_device(const char *path, struct device_handler *device)
-{
-    if (!vfs_root    || !path  || !device) return NULL;
-
-    char dirpath[VFS_MAX_PATH];
-    char fname[VFS_NAME_MAX];
-    vfs_split_path(path, dirpath, fname);
-
-    if (fname[0]     == '\0') return NULL;
-
-    vfs_node_t *dir  = vfs_find(dirpath);
-    if (!dir) dir    = vfs_mkdir(dirpath);
-    if (!dir) return NULL;
-
-    vfs_node_t *node = vfs_create_node(dir, fname, VFS_DEVICE);
-    if (!node) return NULL;
-
-    node->device     = device;
-    return node;
 }
 
 int vfs_remove(const char *path)
@@ -276,99 +238,70 @@ int vfs_remove(const char *path)
     return 0;
 }
 
-int vfs_write(vfs_node_t *node, const void *buf, u64 size, u64 offset)
+int vfs_rename(const char *oldpath, const char *newpath)
 {
-    if (!node || node->type != VFS_FILE || !buf) return -1;
-    if (offset > VFS_MAX_FILE_SIZE || size > VFS_MAX_FILE_SIZE - offset) return -1;
+    if (!vfs_root || !oldpath || !newpath) return -1;
+    if (oldpath[0] == '\0' || newpath[0] == '\0') return -1;
+    vfs_node_t *node = vfs_find(oldpath);
 
-    if (node->borrowed) {
-        node->data = NULL;
-        node->capacity = 0;
-        node->borrowed = 0;
-    }
+    if (!node || node == vfs_root) return -1;
 
-    u64 needed = offset + size;
-    if (!node->data || node->capacity < needed)
+    char old_dirpath[VFS_MAX_PATH];
+    char old_name[VFS_NAME_MAX];
+    char new_dirpath[VFS_MAX_PATH];
+    char new_name[VFS_NAME_MAX];
+
+    vfs_split_path(oldpath, old_dirpath, old_name);
+    vfs_split_path(newpath, new_dirpath, new_name);
+
+    if (old_name[0] == '\0' || new_name[0] == '\0') return -1;
+
+    vfs_node_t *old_parent = vfs_find(old_dirpath);
+    vfs_node_t *new_parent = vfs_find(new_dirpath);
+
+    if (!old_parent || !new_parent) return -1;
+    if (old_parent->type != VFS_DIRECTORY || new_parent->type != VFS_DIRECTORY) return -1;
+    if (new_parent->child_count >= VFS_MAX_CHILDREN) return -1;
+    if (vfs_find_child(new_parent, new_name)) return -1;
+
+    if (node->type == VFS_DIRECTORY)
     {
-        u8 *newbuf = (u8 *)kmalloc(needed);
-        if (!newbuf) return -1;
-        if (node->data) {
-            u64 keep = node->size < offset ? node->size : offset;
-            memcpy(newbuf, node->data, keep);
-            kfree((u64 *)node->data);
+        vfs_node_t *check = new_parent;
+
+        while (check)
+        {
+            if (check == node) return -1;
+
+            check = check->parent;
         }
-
-        node->data = newbuf;
-        node->capacity = needed;
     }
 
-    memcpy(node->data + offset, buf, size);
+    int old_index = -1;
 
-    if (needed > node->size) node->size = needed;
-
-    return (int)size;
-}
-
-int vfs_truncate(vfs_node_t *node, u64 size)
-{
-    if (!node || node->type != VFS_FILE || size > VFS_MAX_FILE_SIZE) return -1;
-
-    if (node->borrowed)
+    for (int i = 0; i < old_parent->child_count; i++)
     {
-        if (size > node->size) return -1;
-
-        node->size = size;
-        return 0;
+        if (old_parent->children[i] == node)
+        {
+            old_index = i;
+            break;
+        }
     }
 
-    if (size == 0)
+    if (old_index < 0) return -1;
+
+    for (int i = old_index; i < old_parent->child_count - 1; i++)
     {
-        if (node->data) kfree((u64 *)node->data);
-        node->data = NULL;
-        node->size = 0;
-        node->capacity = 0;
-
-        return 0;
+        old_parent->children[i] = old_parent->children[i + 1];
     }
 
-    if (size > node->capacity)
-    {
-        u8 *newbuf = (u8 *)kmalloc(size);
+    old_parent->child_count--;
 
-        if (!newbuf) return -1;
-        if (node->data && node->size) memcpy(newbuf, node->data, node->size);
-        if (node->data) kfree((u64 *)node->data);
+    str_copy(node->name, new_name);
+    node->parent = new_parent;
 
-        node->data = newbuf;
-        node->capacity = size;
-    }
+    new_parent->children[new_parent->child_count++] = node;
 
-    node->size = size;
     return 0;
-}
-
-void vfs_set_data(vfs_node_t *node, u8 *ptr, u64 size)
-{
-    if (!node || node->type != VFS_FILE) return;
-
-    // free any previously owned buffer
-    if (node->data && !node->borrowed)
-        kfree((u64 *)node->data);
-
-    node->data     = ptr;
-    node->size     = size;
-    node->capacity = size;
-    node->borrowed = 1;
-}
-
-int vfs_read(vfs_node_t *node, void *buf, u64 size)
-{
-    if (!node || node->type != VFS_FILE || !buf) return -1;
-
-    u64 to_copy = (size < node->size) ? size : node->size;
-    if (to_copy > 0) memcpy(buf, node->data, to_copy);
-
-    return (int)to_copy;
 }
 
 void vfs_list(vfs_node_t *dir)

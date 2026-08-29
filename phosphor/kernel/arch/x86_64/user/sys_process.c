@@ -13,7 +13,7 @@
 #include <kernel/proc/thread.h>
 #include <kernel/proc/process.h>
 #include <kernel/proc/scheduler.h>
-#include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/openfile.h>
 #include <kernel/packages/elf/elf.h>
 #include <kernel/communication/serial.h>
 #include <kernel/mem/phys/physmem.h>
@@ -48,6 +48,46 @@ void sys_fork(cpu_state_t *state)
     //       physmem_free_get(), kheap_get_free_size(), child ? "OK" : "FAILED");
 
     state->rax = child ? child->pid : (u64)-1;
+}
+
+void sys_dup2(cpu_state_t *state)
+{
+    int oldfd = (int)state->rdi;
+    int newfd = (int)state->rsi;
+
+    proc_t *p = process_get_current();
+    if (!p)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (!p->fd_table[oldfd].used)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (oldfd == newfd)
+    {
+        state->rax = (u64)newfd;
+        return;
+    }
+
+    if (p->fd_table[newfd].used && p->fd_table[newfd].ofd >= 0) openfile_unref(p->fd_table[newfd].ofd);
+
+    p->fd_table[newfd].used = 1;
+    p->fd_table[newfd].ofd = p->fd_table[oldfd].ofd;
+
+    if (p->fd_table[newfd].ofd >= 0) openfile_ref(p->fd_table[newfd].ofd);
+
+    state->rax = (u64)newfd;
 }
 
 void sys_execve(cpu_state_t *state)

@@ -14,7 +14,37 @@
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
 
-#define ROOTFS "initrd.cpio"
+int is_module_available()
+{
+    if (
+        module_request.response == NULL ||
+        module_request.response->module_count == 0
+    ) {
+        log("[VFS]", "no boot modules found, rootfs stays empty and lonely\n");
+        return -1;
+    }
+}
+
+int limine_module_find(char *module_path, const char *target_path)
+{
+    if (is_module_available() < 0) return -1;
+
+    for (u64 i = 0; i < module_request.response->module_count; i++)
+    {
+        struct limine_file *mod = module_request.response->modules[i];
+
+        if (!mod || !mod->path) continue;
+
+        if (str_contains(mod->path, module_path))
+        {
+            log("[VFS]", "found initrd module\n");
+            cpio_extract(mod->address, mod->size, target_path);
+            return 0;
+        }
+    }
+
+    return -1;
+}
 
 void rootfs_init(void)
 {
@@ -22,27 +52,13 @@ void rootfs_init(void)
 
     vfs_mkdir("/dev");
     vfs_mkdir("/tmp");
+    vfs_mkdir("/bin");
+    vfs_mkdir("/proc");
+    vfs_mkdir("/users");
+    vfs_mkdir("/system");
 
-    if (
-        module_request.response == NULL ||
-        module_request.response->module_count == 0
-    ) {
-        log("[VFS]", "no boot modules found, rootfs stays empty and lonely\n");
-        return;
-    }
-
-    for (u64 i = 0; i < module_request.response->module_count; i++)
-    {
-        struct limine_file *mod = module_request.response->modules[i];
-        if (!mod || !mod->path) continue;
-
-        if (str_contains(mod->path, ROOTFS))
-        {
-            log("[VFS]", "found initrd.cpio\n");
-            cpio_extract(mod->address, mod->size);
-            return;
-        }
-    }
+    limine_module_find(RDROOT, "/");
+    limine_module_find(RDHOME, "/users");
 
     log("[VFS]", "initrd.cpio was not in the modules, sadly :/\n");
 }

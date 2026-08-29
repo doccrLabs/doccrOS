@@ -13,6 +13,6 @@
 
 #include <types.h>
 
-void cpio_extract(void *archive, u64 size);
+void cpio_extract(void *archive, u64 size, const char *target_path);
 
 #endif

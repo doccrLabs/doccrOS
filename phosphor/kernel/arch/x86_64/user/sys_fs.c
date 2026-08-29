@@ -13,6 +13,7 @@
 #include "../../../fs/openfile.h"
 #include <kernel/proc/process.h>
 #include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/tmpfs/tmpfs.h>
 #include <kernel/devices/device_init.h>
 
 void sys_open(cpu_state_t *state)
@@ -29,7 +30,7 @@ void sys_open(cpu_state_t *state)
     vfs_node_t *node = vfs_find(path);
     if (!node && (flags & K_O_CREAT))
     {
-        node = vfs_create_file(path);
+        node = tmpfs_create(path);
     }
     if (!node)
     {
@@ -111,44 +112,22 @@ void sys_close(cpu_state_t *state)
     state->rax = 0;
 }
 
-void sys_dup2(cpu_state_t *state)
+void sys_rename(cpu_state_t *state)
 {
-    int oldfd = (int)state->rdi;
-    int newfd = (int)state->rsi;
+    const char *oldpath = (const char *)state->rdi;
+    const char *newpath = (const char *)state->rsi;
 
-    proc_t *p = process_get_current();
-    if (!p)
-    {
+    if (
+        !user_ptr_ok((u64)oldpath) ||
+        !user_ptr_ok((u64)newpath)
+    ) {
         state->rax = (u64)-1;
         return;
     }
 
-    if (oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX)
-    {
-        state->rax = (u64)-1;
-        return;
-    }
+    int result = vfs_rename(oldpath, newpath);
 
-    if (!p->fd_table[oldfd].used)
-    {
-        state->rax = (u64)-1;
-        return;
-    }
-
-    if (oldfd == newfd)
-    {
-        state->rax = (u64)newfd;
-        return;
-    }
-
-    if (p->fd_table[newfd].used && p->fd_table[newfd].ofd >= 0) openfile_unref(p->fd_table[newfd].ofd);
-
-    p->fd_table[newfd].used = 1;
-    p->fd_table[newfd].ofd = p->fd_table[oldfd].ofd;
-
-    if (p->fd_table[newfd].ofd >= 0) openfile_ref(p->fd_table[newfd].ofd);
-
-    state->rax = (u64)newfd;
+    state->rax = (result == 0) ? 0 : (u64)-1;
 }
 
 void sys_lseek(cpu_state_t *state)
@@ -355,5 +334,5 @@ void sys_ftruncate(cpu_state_t *state)
         return;
     }
 
-    state->rax = (vfs_truncate(of->node, size) < 0) ? (u64)-1 : 0;
+    state->rax = (tmpfs_truncate(of->node, size) < 0) ? (u64)-1 : 0;
 }

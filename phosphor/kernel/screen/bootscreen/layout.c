@@ -134,6 +134,8 @@ void bootscreen_layout_init(void)
         mid
     );
 
+    loading_screen();
+
     // BS3 whole screen for fb0//tty
     bs_setup_screen(
     	BS3,

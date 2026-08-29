@@ -147,51 +147,172 @@ void *realloc(void *pointer, size_t size) {
     return new_pointer;
 }
 
-int atoi(const char *text) {
-    int sign = 1;
-    int value = 0;
-
-    while (*text == ' ') {
-        text++;
-    }
-    if (*text == '-') {
-        sign = -1;
-        text++;
-    }
-    while (*text >= '0' && *text <= '9') {
-        value = value * 10 + *text++ - '0';
-    }
-    return sign * value;
+void abort(void)
+{
+    _exit(1);
 }
 
-double atof(const char *text) {
-    double value = 0;
-    double place = 0.1;
-    int sign = 1;
+long strtol(const char *s, char **end, int base)
+{
+    while (*s == ' ') s++;
 
-    while (*text == ' ') {
-        text++;
-    }
-    if (*text == '-') {
-        sign = -1;
-        text++;
-    }
-    while (*text >= '0' && *text <= '9') {
-        value = value * 10 + *text++ - '0';
-    }
-    if (*text == '.') {
-        text++;
-        while (*text >= '0' && *text <= '9') {
-            value += (*text++ - '0') * place;
-            place *= 0.1;
+    int negative = (*s == '-');
+
+    if (*s == '-' || *s == '+') s++;
+
+    if (base == 0)
+    {
+        if (*s == '0')
+        {
+            if (s[1] == 'x' || s[1] == 'X')
+            {
+                base = 16;
+                s += 2;
+            } else
+            {
+                base = 8;
+            }
+        } else
+        {
+            base = 10;
         }
     }
+    else if (
+        base == 16 &&
+        *s == '0' &&
+        (
+            s[1] == 'x' ||
+            s[1] == 'X'
+        )
+    ) { s += 2; }
+
+    long value = 0;
+
+    while (*s)
+    {
+        int digit;
+
+        if (*s >= '0' && *s <= '9') digit = *s - '0';
+        else if (*s >= 'a' && *s <= 'z') digit = *s - 'a' + 10;
+        else if (*s >= 'A' && *s <= 'Z') digit = *s - 'A' + 10;
+        else break;
+
+        if (digit >= base) break;
+
+        value = value * base + digit;
+        s++;
+    }
+
+    if (end) *end = (char *)s;
+
+    return negative ? -value : value;
+}
+
+static unsigned int rng_state = 123456789;
+
+void srand(unsigned int seed)
+{
+    rng_state = seed;
+}
+
+int rand(void)
+{
+    rng_state = rng_state * 1103515245 + 12345;
+    return (int)((rng_state >> 16) & 0x7FFF);
+}
+
+double strtod(const char *nptr, char **endptr)
+{
+    while (
+    	*nptr == ' ' 	||
+     	*nptr == '\t' 	||
+      	*nptr == '\n' 	||
+       	*nptr == '\r'
+    ) {  nptr++; }
+
+    int sign = 1;
+
+    if (*nptr == '-')
+    {
+        sign = -1;
+        nptr++;
+    } else if (*nptr == '+') {
+        nptr++;
+    }
+
+    double value = 0.0;
+
+    while (*nptr >= '0' && *nptr <= '9') {
+        value = value * 10.0 + (*nptr - '0');
+        nptr++;
+    }
+
+    if (*nptr == '.')
+    {
+        nptr++;
+        double fraction = 1.0;
+
+        while (*nptr >= '0' && *nptr <= '9')
+        {
+            fraction *= 10.0;
+            value += (*nptr - '0') / fraction;
+            nptr++;
+        }
+    }
+
+    if (*nptr == 'e' || *nptr == 'E')
+    {
+        nptr++;
+        int exp_sign = 1;
+
+        if (*nptr == '-')
+        {
+            exp_sign = -1;
+            nptr++;
+        } else if (*nptr == '+')
+        {
+            nptr++;
+        }
+
+        int exp = 0;
+        while (*nptr >= '0' && *nptr <= '9')
+        {
+            exp = exp * 10 + (*nptr - '0');
+            nptr++;
+        }
+
+        double multiplier = 1.0;
+        for (int i = 0; i < exp; i++)
+        {
+            multiplier *= 10.0;
+        }
+
+        if (exp_sign == -1)
+        {
+            value /= multiplier;
+        } else
+        {
+            value *= multiplier;
+        }
+    }
+
+    if (endptr)
+    {
+        *endptr = (char *)nptr;
+    }
+
     return sign * value;
 }
 
-int abs(int value) {
-    return value < 0 ? -value : value;
+double atof(const char *nptr)
+{
+    return strtod(nptr, NULL);
 }
+
+int atoi(const char *s) { return (int)strtol(s, NULL, 10); }
+long atol(const char *s)  { return strtol(s, NULL, 10); }
+int abs (int x) { return x < 0 ? -x : x; }
+long labs(long x) { return x < 0 ? -x : x; }
 
 char *getenv(const char *name) {
     (void)name;

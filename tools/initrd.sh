@@ -3,6 +3,7 @@ set -euo pipefail
 
 #SRC="./dsk/rd"
 #OUT="./dsk/initrd.cpio"
+USERNAME="pc"
 
 if [ -z "USERNAME" ]; then
 	echo "error: username is empty"

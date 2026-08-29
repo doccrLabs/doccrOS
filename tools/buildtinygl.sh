@@ -26,7 +26,7 @@ LIBC := ../../libc
 CFLAGS := -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
           -fno-PIE -fno-pic -m64 -march=x86-64 \
           -mno-red-zone -Wall -Wextra -std=gnu11            \
-          -I$(LIBC)/include -Iinclude -Isrc -D__EMEX__
+          -I$(LIBC)/include -Iinclude -Isrc -D__sulfur__
 
 SRCS := src/api.c src/arrays.c src/clear.c src/clip.c src/get.c \
         src/init.c src/light.c src/matrix.c src/memory.c src/misc.c \

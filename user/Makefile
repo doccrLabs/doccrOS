@@ -15,13 +15,16 @@ all:
 
 	@$(MAKE) -C bin/poweroff
 	@$(MAKE) -C bin/reboot
-	@$(MAKE) -C bin/template
-	@$(MAKE) -C bin/welcome
-	@$(MAKE) -C bin/system
-	@$(MAKE) -C bin/login
+#@$(MAKE) -C bin/doomgeneric ## default doom
 	@$(MAKE) -C bin/hello
-	@$(MAKE) -C bin/gears
-#@$(MAKE) -C bin/doomgeneric
+	@$(MAKE) -C bin/system
+
+	@$(MAKE) -C apps/template
+	@$(MAKE) -C apps/welcome
+	@$(MAKE) -C apps/login
+	@$(MAKE) -C apps/gears
+#@$(MAKE) -C apps/doomgeneric ## desktop doom
+	@$(MAKE) -C apps/terminal
 
 clean:
 	@$(MAKE) -C libc clean
@@ -31,12 +34,15 @@ clean:
 
 	@$(MAKE) -C bin/poweroff clean
 	@$(MAKE) -C bin/reboot clean
-	@$(MAKE) -C bin/template clean
-	@$(MAKE) -C bin/welcome clean
-	@$(MAKE) -C bin/system clean
-	@$(MAKE) -C bin/login clean
-	@$(MAKE) -C bin/hello clean
-	@$(MAKE) -C bin/gears clean
 #@$(MAKE) -C bin/doomgeneric clean
+	@$(MAKE) -C bin/system clean
+	@$(MAKE) -C bin/hello clean
+
+	@$(MAKE) -C apps/template clean
+	@$(MAKE) -C apps/welcome clean
+	@$(MAKE) -C apps/login clean
+	@$(MAKE) -C apps/gears clean
+#@$(MAKE) -C apps/doomgeneric clean
+	@$(MAKE) -C apps/terminal clean
 
 .PHONY: all clean

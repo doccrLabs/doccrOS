@@ -11,11 +11,16 @@
 #include "vt.h"
 #include "../names.h"
 #include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/devfs/devfs.h>
 #include <kernel/mem/meminclude.h>
 #include <kernel/screen/lib/print.h>
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/colors.h>
 #include <kernel/screen/lib/log.h>
+#include <kernel/screen/bootscreen/boot.h>
+#include <kernel/devices/input/keycodes.h>
+#include <kernel/devices/input/input.h>
+#include <kernel/communication/serial.h>
 
 // fbcon(bs3) is normaly on but desktop needs to deactivate
 // it so the scrolling doesnt ruin the rendering of the desktop
@@ -45,6 +50,7 @@ typedef struct
     int refcount;
     u64 id;
     vt_ring_t input;
+    vt_ring_t output;
 } vt_t;
 
 typedef struct
@@ -138,6 +144,7 @@ static vt_t *vt_alloc(void)
             g_vts[i].refcount = 0;
 
             ring_init(&g_vts[i].input);
+            ring_init(&g_vts[i].output);
             return &g_vts[i];
         }
     }
@@ -171,6 +178,8 @@ static u64 path_to_id(const char *path)
     const char *p = base;
     u64 v = 0;
 
+    while (*p && (*p < '0' || *p > '9')) p++;
+
     while (*p >= '0' && *p <= '9')
     {
         v = v * 10 + (u64)(*p - '0');
@@ -178,6 +187,84 @@ static u64 path_to_id(const char *path)
     }
 
     return v;
+}
+
+static char vt_keycode_to_ascii(u16 code, u8 modifiers)
+{
+    int shift = (modifiers & INPUT_MOD_SHIFT) != 0;
+
+    switch ((keycode_t)code)
+    {
+        case KEY_A: return shift ? 'A' : 'a';
+        case KEY_B: return shift ? 'B' : 'b';
+        case KEY_C: return shift ? 'C' : 'c';
+        case KEY_D: return shift ? 'D' : 'd';
+        case KEY_E: return shift ? 'E' : 'e';
+        case KEY_F: return shift ? 'F' : 'f';
+        case KEY_G: return shift ? 'G' : 'g';
+        case KEY_H: return shift ? 'H' : 'h';
+        case KEY_I: return shift ? 'I' : 'i';
+        case KEY_J: return shift ? 'J' : 'j';
+        case KEY_K: return shift ? 'K' : 'k';
+        case KEY_L: return shift ? 'L' : 'l';
+        case KEY_M: return shift ? 'M' : 'm';
+        case KEY_N: return shift ? 'N' : 'n';
+        case KEY_O: return shift ? 'O' : 'o';
+        case KEY_P: return shift ? 'P' : 'p';
+        case KEY_Q: return shift ? 'Q' : 'q';
+        case KEY_R: return shift ? 'R' : 'r';
+        case KEY_S: return shift ? 'S' : 's';
+        case KEY_T: return shift ? 'T' : 't';
+        case KEY_U: return shift ? 'U' : 'u';
+        case KEY_V: return shift ? 'V' : 'v';
+        case KEY_W: return shift ? 'W' : 'w';
+        case KEY_X: return shift ? 'X' : 'x';
+        case KEY_Y: return shift ? 'Y' : 'y';
+        case KEY_Z: return shift ? 'Z' : 'z';
+
+        case KEY_0: return shift ? ')' : '0';
+        case KEY_1: return shift ? '!' : '1';
+        case KEY_2: return shift ? '@' : '2';
+        case KEY_3: return shift ? '#' : '3';
+        case KEY_4: return shift ? '$' : '4';
+        case KEY_5: return shift ? '%' : '5';
+        case KEY_6: return shift ? '^' : '6';
+        case KEY_7: return shift ? '&' : '7';
+        case KEY_8: return shift ? '*' : '8';
+        case KEY_9: return shift ? '(' : '9';
+
+        case KEY_SPACE: return ' ';
+        case KEY_ENTER: return '\n';
+        case KEY_KP_ENTER: return '\n';
+        case KEY_BACKSPACE: return '\b';
+        case KEY_TAB: return '\t';
+
+        case KEY_MINUS:      return shift ? '_' : '-';
+        case KEY_EQUAL:      return shift ? '+' : '=';
+        case KEY_LBRACKET:   return shift ? '{' : '[';
+        case KEY_RBRACKET:   return shift ? '}' : ']';
+        case KEY_BACKSLASH:  return shift ? '|' : '\\';
+        case KEY_SEMICOLON:  return shift ? ':' : ';';
+        case KEY_APOSTROPHE: return shift ? '"' : '\'';
+        case KEY_GRAVE:      return shift ? '~' : '`';
+        case KEY_COMMA:      return shift ? '<' : ',';
+        case KEY_DOT:        return shift ? '>' : '.';
+        case KEY_SLASH:      return shift ? '?' : '/';
+
+        default: return 0;
+    }
+}
+
+void vt_kbd_feed(u16 code, u8 modifiers)
+{
+    if (!g_active_vt) return;
+
+    char c = vt_keycode_to_ascii(code, modifiers);
+    if (!c) return;
+
+    serial_putchar(c);
+
+    ring_push(&g_active_vt->input, c);
 }
 
 static void *vt_id_open(const char *path)
@@ -228,6 +315,11 @@ static int vt_id_write(void *handle, const void *buf, size_t count)
 
     const char *src = (const char *)buf;
 
+    serial_printf("[VT%llu] ", h->vt->id);
+    for (size_t i = 0; i < count; i++) serial_putchar(src[i]);
+    //oring
+    for (size_t i = 0; i < count; i++) ring_push(&h->vt->output, src[i]);
+
     //TODO:
     // everything into one buffer
     // and then load the screen when active
@@ -274,6 +366,34 @@ static i64 vt_id_ioctl(void *handle, u64 request, void *arg)
             for (u64 i = 0; i < args.len; i++) ring_push(&h->vt->input, src[i]);
 
             return 0;
+        }
+
+        case VT_IOCTL_CLEAR:
+        {
+            if (h->vt == g_active_vt) bs.Clear(BS3);
+            return 0;
+        }
+
+        case VT_IOCTL_READ_OUTPUT:
+        {
+            if (!arg) return -1;
+
+            vt_drain_args_t args = *(vt_drain_args_t *)arg;
+            if (!args.data) return -1;
+
+            char *dst = (char *)args.data;
+            u64 written = 0;
+            char c;
+
+            while (written < args.len && ring_pop(&h->vt->output, &c))
+            {
+                dst[written++] = c;
+            }
+
+            args.len = written;
+            *(vt_drain_args_t *)arg = args;
+
+            return (i64)written;
         }
 
         default:
@@ -328,7 +448,7 @@ static i64 vt_ctl_ioctl(void *handle, u64 request, void *arg)
 
             vt_path(vt->id, path);
 
-            vfs_node_t *node = vfs_create_device(path, &vt_id_device_ops);
+            vfs_node_t *node = devfs_mount(path, &vt_id_device_ops);
             if (!node)
             {
                 vt->used = 0;

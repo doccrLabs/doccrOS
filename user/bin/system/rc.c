@@ -28,8 +28,8 @@ static char tb[256]; // token result buffer
 #define EXE_NAME "exec"
 #define WAI_NAME "wait"
 #define IFS_NAME "if"
-#define ELS_NAME "else"
-#define EIF_NAME "endif"
+#define ELS_NAME "ef"
+#define EIF_NAME "fi"
 
 #define CURRENT_SKIP (if_top >= 0 && if_stack[if_top])
 #define BG ""
@@ -44,11 +44,13 @@ static char *tok(void)
 
     if (*tp == '"')
     {
-        for (
-            tp++;
+        tp++;
+
+        while (
             *tp &&
             *tp != '"' &&
-            *tp != '\n';
+            *tp != '\n' &&
+            i < 255
         ) {
             tb[i++] = *tp++;
         }
@@ -58,7 +60,26 @@ static char *tok(void)
         return tb;
     }
 
-    if (*tp == '=' || *tp == '(' || *tp == ')' || *tp == ':')
+    if (*tp == '=')
+    {
+        if (*(tp + 1) == '=')
+        {
+            tb[0] = '=';
+            tb[1] = '=';
+            tb[2] = '\0';
+
+            tp += 2;
+
+            return tb;
+        }
+
+        tb[0] = *tp++;
+        tb[1] = '\0';
+
+        return tb;
+    }
+
+    if (*tp == '(' || *tp == ')' || *tp == ':')
     {
         tb[0] = *tp++;
         tb[1] = '\0';
@@ -158,6 +179,8 @@ int sulfd_parse(const char *path, sulfd_t *out)
         {
             sulfd_var_t *v = &out->vars[out->var_count];
 
+            memset(v, 0, sizeof(*v));
+
             char *name = tok();
 
             if (!name)
@@ -169,15 +192,45 @@ int sulfd_parse(const char *path, sulfd_t *out)
             strncpy(v->name, name, sizeof(v->name) - 1);
             v->name[sizeof(v->name) - 1] = '\0';
 
-            tok();
-            tok(); // skip '=' '('
+            char *eq = tok();
 
-            char *next = tok();
-
-            if (next)
+            if (!eq || strcmp(eq, "=") != 0)
             {
-                strncpy(v->path, next, sizeof(v->path) - 1);
-                v->path[sizeof(v->path) - 1] = '\0';
+                skipline();
+                continue;
+            }
+
+            char *value = tok();
+
+            if (!value)
+            {
+                skipline();
+                continue;
+            }
+
+            if (strcmp(value, "(") == 0)
+            {
+                char *path_value = tok();
+
+                if (path_value)
+                {
+                    strncpy(
+                        v->path,
+                        path_value,
+                        sizeof(v->path) - 1
+                    );
+
+                    v->path[sizeof(v->path) - 1] = '\0';
+                }
+
+                v->is_value = 0;
+
+                tok();
+            }
+            else
+            {
+                v->value = atoi(value);
+                v->is_value = 1;
             }
 
             out->var_count++;
@@ -270,15 +323,8 @@ int sulfd_parse(const char *path, sulfd_t *out)
 
             while (next && next[0] == CMD_PREFIX)
             {
-                if (strcmp(next + 1, "bg") == 0)
-                {
-                    e->bg = 1;
-                    next = tok();
-                }
-                else
-                {
-                    next = tok();
-                }
+                if (strcmp(next + 1, "bg") == 0) e->bg = 1;
+                next = tok();
             }
 
             if (!next)
@@ -332,7 +378,18 @@ int sulfd_parse(const char *path, sulfd_t *out)
                     sizeof(e->var_name) - 1
                 );
 
-                e->var_name[sizeof(e->var_name) - 1] = '\0';
+                e->var_name[
+                    sizeof(e->var_name) - 1
+                ] = '\0';
+            }
+
+            char *op = tok();
+
+            if (op && strcmp(op, "==") == 0)
+            {
+                char *value = tok();
+
+                if (value) e->wait_time = atoi(value);
             }
 
             out->exec_count++;
@@ -380,41 +437,34 @@ void sulfd_run(sulfd_t *rc)
     {
         sulfd_exec_t *e = &rc->execs[i];
 
-        if (e->is_wait)
-        {
-            //printf(PREFIX "wait %d\n", e->wait_time);
-            sulfd_sleep(e->wait_time);
-            continue;
-        }
-
-        if (e->is_print)
-        {
-            printf("%s\n", e->message);
-            continue;
-        }
-
-        if (e->is_elog)
-        {
-            printf(PREFIX "%s\n", e->message);
-            continue;
-        }
-
         if (e->is_if)
         {
             int condition = 0;
 
             for (int j = 0; j < rc->var_count; j++)
             {
-                if (strcmp(rc->vars[j].name, e->var_name) == 0)
-                {
-                    condition = 1;
+                if (
+                    strcmp(
+                        rc->vars[j].name,
+                        e->var_name
+                    ) == 0
+                ) {
+                    if (
+                        rc->vars[j].is_value &&
+                        rc->vars[j].value == e->wait_time
+                    ) {
+                        condition = 1;
+                    }
+
                     break;
                 }
             }
 
-            if_top++;
-
-            if (if_top < 32) if_stack[if_top] = !condition;
+            if (if_top < 31)
+            {
+                if_top++;
+                if_stack[if_top] = !condition;
+            }
 
             continue;
         }
@@ -433,7 +483,26 @@ void sulfd_run(sulfd_t *rc)
             continue;
         }
 
-        if (CURRENT_SKIP) continue;
+        if (if_top >= 0 && if_stack[if_top]) continue;
+
+        if (e->is_wait)
+        {
+            //printf(PREFIX "wait %d\n", e->wait_time);
+            sulfd_sleep(e->wait_time);
+            continue;
+        }
+
+        if (e->is_print)
+        {
+            printf("%s\n", e->message);
+            continue;
+        }
+
+        if (e->is_elog)
+        {
+            printf(PREFIX "%s\n", e->message);
+            continue;
+        }
 
         const char *path = NULL;
 

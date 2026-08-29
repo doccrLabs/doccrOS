@@ -37,6 +37,8 @@ typedef struct thread {
     u8     *stack_base;
     u64    stack_size;
 
+    u8 fpu_state[512] __attribute__((aligned(16)));
+
     int    is_user;
     u64    kstack_top;
 
@@ -64,7 +66,7 @@ typedef struct thread {
     struct thread    *sched_next;
     struct thread    *wait_next;
     struct wait_queue *wait_queue;
-} thread_t;
+} __attribute__((aligned(16))) thread_t;
 
 void   thread_subsystem_init(void);
 void   thread_destroy(thread_t *t);

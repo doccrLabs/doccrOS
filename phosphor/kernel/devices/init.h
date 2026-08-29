@@ -11,6 +11,6 @@
 #ifndef KERNEL_DEVICE_INIT_H
 #define KERNEL_DEVICE_INIT_H
 
-void kernel_devices_init(void);
+void init_all_devices(void);
 
 #endif

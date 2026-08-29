@@ -33,10 +33,16 @@ int main(void)
     printf("sulfurOS version/build: %s\n", uts.version);
     printf("\n");
 
+    #define USERFIRST "/users/user_id"
+    #define NAMEAFTER "/users/pc"
+    printf("setting up users directory\n");
+    printf("renaming %s to %s... \n", USERFIRST, NAMEAFTER);
+    if (rename(USERFIRST, NAMEAFTER) < 0) return 1;
+
     #define SRC_CPIO "/system/s4.cpio"
     #define DEST_DIR "/system/desktop/resources/"
 
-    printf("unzipping %s to %s\n", SRC_CPIO, DEST_DIR);
+    printf("unzipping %s to %s...\n", SRC_CPIO, DEST_DIR);
 
     if (cpio_extract_file(SRC_CPIO, DEST_DIR, &stats) != 0)
     {
@@ -50,6 +56,7 @@ int main(void)
         stats.files_written,
         stats.dirs_created
     );
+
 
     static sulfd_t rc;
 
@@ -66,6 +73,7 @@ int main(void)
     }
 
     sulfd_run(&rc);
+    return 0;
 
 error:
     fprintf(

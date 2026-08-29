@@ -12,7 +12,7 @@
 
 #include <kernel/devices/device_init.h>
 
-#include <kernel/arch/x86_64/drivers/ps2/ps2.h>
+#include <drivers/x86_64/ps2/ps2.h>
 
 #include <kernel/devices/input/ctrl.h>
 #include <kernel/devices/input/kbd.h>
@@ -24,7 +24,7 @@
 #include <kernel/screen/lib/log.h>
 #include <kernel/communication/serial.h>
 
-void kernel_devices_init(void)
+void init_all_devices(void)
 {
  	input_ctrl_init();
     device_register(&kbd_module);

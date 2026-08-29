@@ -12,9 +12,9 @@ CC  := x86_64-elf-gcc
 AS  := nasm
 AR  := x86_64-elf-ar
 
-CFLAGS := -ffreestanding -nostdlib -fno-builtin -fno-stack-protector            \
-          -fno-PIE -fno-pic -m64 -march=x86-64 -mno-red-zone -mno-sse -mno-sse2 \
-          -Wall -Wextra -std=gnu11                                              \
+CFLAGS := -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+          -fno-PIE -fno-pic -m64 -march=x86-64 -mno-red-zone         \
+          -Wall -Wextra -std=gnu11                                   \
           -Iinclude
 
 ASFLAGS := -f elf64

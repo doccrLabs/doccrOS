@@ -79,28 +79,49 @@ $(ISO): limine.conf $(LIMINE_TOOL) doom-wad-check build_num $(BUILD_DIR)/kernel.
 	@cp $(addprefix $(INCLUDE_DIR)/limine/limine-, bios.sys bios-cd.bin uefi-cd.bin) $(ISODIR)/boot/limine/
 	@cp $(addprefix $(INCLUDE_DIR)/limine/BOOT, IA32.EFI X64.EFI) $(ISODIR)/EFI/BOOT/
 
+	@mkdir -p $(DISK_DIR)/rd/
+	@mkdir -p $(DISK_DIR)/rd/system
+	@mkdir -p $(DISK_DIR)/rd/bin
+	@mkdir -p $(DISK_DIR)/rd/system/bin
+	@mkdir -p $(DISK_DIR)/rd/system/fonts
+	@mkdir -p $(DISK_DIR)/rd/system/logs
+
+	@mkdir -p $(DISK_DIR)/rdh/guest
+	@mkdir -p $(DISK_DIR)/rdh/user_id
+	@mkdir -p $(DISK_DIR)/rdh/user_id/applications
+	@mkdir -p $(DISK_DIR)/rdh/user_id/bin
+
 	#copying binaries
-	@cp $(USERSPACE_DIR)/bin/system/sulfd.elf $(DISK_DIR)/rd/system/
+	@cp $(USERSPACE_DIR)/bin/system/sulfd.elf $(DISK_DIR)/rd/system/bin/
 	@cp $(USERSPACE_DIR)/bin/hello/hello.elf $(DISK_DIR)/rd/bin/
 #@cp $(USERSPACE_DIR)/bin/doomgeneric/doomgeneric.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/poweroff/poweroff.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/reboot/reboot.elf $(DISK_DIR)/rd/bin/
-	@cp $(USERSPACE_DIR)/bin/template/template.elf $(DISK_DIR)/rd/bin/
-	@cp $(USERSPACE_DIR)/bin/welcome/welcome.elf $(DISK_DIR)/rd/system/desktop/
-	@cp $(USERSPACE_DIR)/bin/login/login.elf $(DISK_DIR)/rd/system/desktop/
-	@cp $(USERSPACE_DIR)/bin/gears/gears.elf $(DISK_DIR)/rd/system/desktop/
+	@cp $(USERSPACE_DIR)/apps/template/template.elf $(DISK_DIR)/rdh/user_id/applications
+	@cp $(USERSPACE_DIR)/apps/welcome/welcome.elf $(DISK_DIR)/rdh/user_id/applications
+	@cp $(USERSPACE_DIR)/apps/login/login.elf $(DISK_DIR)/rdh/user_id/applications
+	@cp $(USERSPACE_DIR)/apps/gears/gears.elf $(DISK_DIR)/rdh/user_id/applications
+#@cp $(USERSPACE_DIR)/apps/doomgeneric/doomgeneric.elf $(DISK_DIR)/rdh/user_id/applications/
+	@cp $(USERSPACE_DIR)/apps/terminal/terminal.elf $(DISK_DIR)/rdh/user_id/applications
+
 	@cp "$(DOOM_WAD)" $(DISK_DIR)/rd/doom1.wad
 
 	@echo "[MK] creating initrd.cpio..."
 	@chmod +x tools/initrd.sh
 	./tools/initrd.sh
 	@cp $(DISK_DIR)/initrd.cpio $(ISODIR)/boot/
+	@cp $(DISK_DIR)/initrdh.cpio $(ISODIR)/boot/
 
-	@xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
+	@xorriso -as mkisofs \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		-b boot/limine/limine-bios-cd.bin \
 		--efi-boot boot/limine/limine-uefi-cd.bin \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
-		$(ISODIR) -o $@ 2>/dev/null
+		-iso-level 3 \
+		-rational-rock \
+		$(ISODIR) \
+		-o $@ \
+		2>/dev/null
 	$(LIMINE_TOOL) bios-install $@
 	@echo "------------------------"
 	@echo "[OK] $@ created"

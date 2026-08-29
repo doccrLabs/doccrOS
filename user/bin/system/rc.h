@@ -18,6 +18,8 @@
 typedef struct {
     char name[64];
     char path[256];
+    int value;
+    int is_value;
 } sulfd_var_t;
 
 typedef struct {

@@ -63,6 +63,7 @@ typedef struct
     void  (*Putpixel)(u32 x, u32 y, u32 color);
     void  (*Clear)(int screen);
     void  (*Flush)(int screen);
+    void  (*FlushRect)(int screen, u32 x, u32 y, u32 w, u32 h);
 
 } bootscreen_api_t;
 
@@ -71,5 +72,7 @@ extern bootscreen_api_t bs;
 void bootscreen_setup(void);
 void bootscreen_layout_init(void);
 void bootscreen_bs3_init_backbuffer(void);
+
+void loading_screen(void);
 
 #endif

@@ -37,6 +37,7 @@
 #define SYS_WAITPID        61
 #define SYS_GETDENTS       78
 #define SYS_FTRUNCATE      77
+#define SYS_RENAME         82
 #define SYS_MKDIR          83
 #define SYS_UNLINK         87
 #define SYS_GETUID        102

@@ -15,6 +15,7 @@
 #include <kernel/mem/meminclude.h>
 #include <kernel/arch/hal/halt.h>
 #include <kernel/screen/lib/string.h>
+#include <kernel/arch/x86_64/fpu/fpu.h>
 
 extern void thread_trampoline(void);
 extern void user_thread_trampoline(void);
@@ -43,6 +44,7 @@ thread_t *thread_create(proc_t *owner, const char *name, thread_entry_t entry, v
 
     thread_t *t = (thread_t *)kcalloc(1, sizeof(thread_t));
     if (!t) return NULL;
+    fpu_init_state(t->fpu_state);
 
     u8 *stack = (u8 *)kmalloc(THREAD_STACK_SIZE);
 
@@ -110,6 +112,7 @@ thread_t *thread_create_user(
 
     thread_t *t = (thread_t *)kcalloc(1, sizeof(thread_t));
     if (!t) return NULL;
+    fpu_init_state(t->fpu_state);
 
     u8 *kstack = (u8 *)kmalloc(THREAD_STACK_SIZE);
     if (!kstack)

@@ -16,8 +16,9 @@
 #include <kernel/mem/vmm/vmm.h>
 #include <kernel/arch/x86_64/gdt/gdt.h>
 #include <kernel/arch/x86_64/user/syscall.h>
+#include <kernel/arch/x86_64/fpu/fpu.h>
 
-#define QUANTUM 10
+#define QUANTUM 2
 
 extern void context_switch(u64 *old_rsp_out, u64 new_rsp);
 
@@ -76,6 +77,7 @@ void sched_init(void)
     bootstrap.state = THREAD_RUNNING;
     bootstrap.owner = NULL;
     bootstrap.sched_next = NULL;
+    fpu_init_state(bootstrap.fpu_state);
 
     current     = &bootstrap;
     idle_thread = NULL;
@@ -252,7 +254,12 @@ void sched_yield(void) {
         syscall_update_kstack(next->kstack_top);
     }
 
+    __asm__ volatile("fxsave (%0)" :: "r"(prev->fpu_state) : "memory");
+
     //printf("[SCHED] about to context_switch\n");
 
     context_switch(&prev->rsp, next->rsp);
+
+    thread_t *me = thread_get_current();
+    __asm__ volatile("fxrstor (%0)" :: "r"(me->fpu_state) : "memory");
 }

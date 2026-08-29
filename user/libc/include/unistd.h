@@ -36,6 +36,7 @@
 #define SYS_WAITPID              61
 #define SYS_GETDENTS             78
 #define SYS_FTRUNCATE            77
+#define SYS_RENAME               82
 #define SYS_MKDIR                83
 #define SYS_UNLINK               87
 #define SYS_GETUID              102
@@ -77,7 +78,6 @@ long spawn(const char *path);
 void yield(void);
 long getuid(void);
 long getgid(void);
-long mkdir(const char *path, int mode);
 long unlink(const char *path);
 long getdents(int fd, void *buf, size_t size);
 long ftruncate(int fd, long size);

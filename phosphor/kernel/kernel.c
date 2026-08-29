@@ -10,11 +10,11 @@
 
 #include "kernel.h"
 #include "arch/x86_64/assembly.h"
+#include "devices/init.h"
 #include "screen/lib/print.h"
 
 #include <kernel/arch/hal/assembly.h>
 #include <kernel/limine/reqs.h>
-#include <kernel/include/logo.h>
 #include <kernel/communication/serial.h>
 
 #include <kernel/screen/graphics.h>
@@ -46,7 +46,10 @@
 
 // File system
 #include <kernel/fs/vfs/vfs.h>
-#include <kernel/fs/vfs/procfs.h>
+#include <kernel/fs/procfs/procfs.h>
+#include <kernel/fs/devfs/devfs.h>
+#include <kernel/fs/tmpfs/tmpfs.h>
+#include <kernel/fs/openfile.h>
 
 // User
 #include <kernel/user/init.h>
@@ -62,7 +65,6 @@ void _start(void)
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     serial_init();
     graphics_init(fb);
-    draw_logo();
 
     //full buffer clear even tho they werent used yet
     bs.Clear(BS1);
@@ -83,8 +85,6 @@ void _start(void)
 
     bootscreen_bs3_init_backbuffer();
 
-    draw_logo();
-
     {
         cpu_detect();
         log("[CPU]", "Detected CPU\n");
@@ -98,21 +98,22 @@ void _start(void)
     process_init();
     sched_init();
 
+    {
+        vfs_init();
+        rootfs_init();
+        procfs_init();
+        devices_init();
+        init_all_devices();
+        vfs_dump();
+    }
+
+
     proc_t *kproc = process_create("kernel");
     thread_t *t_rt = thread_create(kproc, "__rt", idle_fn, NULL);
     if (!kproc) panic("could not create kernel proc, rip");
     if (!t_rt) panic("could not create \"__rt\" thread");
 
     sched_set_idle(t_rt);
-
-    vfs_init();
-    rootfs_init();
-    vfs_dump();
-
-    procfs_init();
-
-    devices_init();
-    kernel_devices_init();
 
     user_start();
     sched_start();

@@ -8,6 +8,8 @@
  *
  */
 
+#include "syscall.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -397,8 +399,12 @@ int remove(const char *path) {
     return (int)unlink(path);
 }
 
-int rename(const char *old_path, const char *new_path) {
-    (void)old_path;
-    (void)new_path;
-    return -1;
+int rename(const char *old_path, const char *new_path)
+{
+    return syscall3(
+        SYS_RENAME,
+        (long)old_path,
+        (long)new_path,
+        0
+    );
 }

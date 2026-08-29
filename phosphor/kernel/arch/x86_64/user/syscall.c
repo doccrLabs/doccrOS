@@ -110,6 +110,7 @@ void syscall_dispatch(cpu_state_t *state)
         case SYS_WAITPID:        sys_waitpid(state);            break;
         case SYS_GETDENTS:       sys_getdents(state);           break;
         case SYS_FTRUNCATE:      sys_ftruncate(state);          break;
+        case SYS_RENAME:         sys_rename(state);             break;
         case SYS_MKDIR:          sys_mkdir(state);              break;
         case SYS_UNLINK:         sys_unlink(state);             break;
         case SYS_GETUID:         sys_getuid(state);             break;

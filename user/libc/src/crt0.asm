@@ -17,6 +17,8 @@ extern _exit
 
 _start:
     xor rbp, rbp
+    mov r12, [rsp]      ; argc
+    lea r13, [rsp + 8]  ; argv
     and rsp, -16
 
     mov rax, 36
@@ -27,6 +29,8 @@ _start:
     xor r8, r8
     syscall
 
+    mov rdi, r12
+    mov rsi, r13
     call main
 
     mov edi, eax

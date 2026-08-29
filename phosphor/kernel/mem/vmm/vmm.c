@@ -584,7 +584,13 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
         {
             u64 va   = src_cur->base + i * PAGE_SIZE;
             u64 phys = pte_lookup(src, va);
-            if (!phys) continue;
+            if (!phys)
+            {
+                region_free(node);
+                __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+                vmm_space_destroy(dst);
+                return NULL;
+            }
 
             if (src_cur->flags & VMM_REGION_MMIO)
             {

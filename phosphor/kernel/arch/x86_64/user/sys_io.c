@@ -16,6 +16,7 @@
 #include <kernel/communication/serial.h>
 #include <kernel/proc/process.h>
 #include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/tmpfs/tmpfs.h>
 #include <kernel/devices/device_init.h>
 #include <kernel/devices/vt/vt.h>
 #include <kernel/mem/mem.h>
@@ -193,7 +194,7 @@ void sys_write(cpu_state_t *state)
         return;
     }
 
-    int written = vfs_write(
+    int written = tmpfs_write(
         of->node,
         buf,
         len,

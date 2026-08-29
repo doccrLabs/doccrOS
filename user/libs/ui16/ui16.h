@@ -106,7 +106,8 @@ typedef enum
 {
     UI16_NODE_CONTAINER,
     UI16_NODE_BUTTON,
-    UI16_NODE_LABEL
+    UI16_NODE_LABEL,
+    UI16_NODE_IMAGE
 } ui16_node_kind_t;
 
 typedef struct ui16_node_s
@@ -302,6 +303,20 @@ ui16_node_t *ui16__labelStyled(ui16_style_t label_style, const char *label_text)
                         (__VA_ARGS__)
 
 void ui16_input(int mouse_x, int mouse_y, int mouse_down);
+
+typedef struct bmp_image_s bmp_image_t;
+
+void ui16_drawBmp(const char *path, int x, int y);
+void ui16_drawBmpScaled(const char *path, int x, int y, int w, int h);
+
+ui16_node_t *ui16__imageSimple(const char *path);
+ui16_node_t *ui16__imageStyled(ui16_style_t image_style, const char *path);
+
+#define ui16_image(...) UI16_ARG2(\
+                            __VA_ARGS__, \
+                            ui16__imageStyled, \
+                            ui16__imageSimple) \
+                            (__VA_ARGS__)
 
 int ui16_hovered(const ui16_node_t *node);
 int ui16_pressed(const ui16_node_t *node);

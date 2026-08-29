@@ -12,7 +12,7 @@
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
 #include <kernel/screen/colors.h>
-#include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/devfs/devfs.h>
 
 
 static device_handler *devices[DEVICES_MAX_AMOUNT];
@@ -56,7 +56,7 @@ int device_register(device_handler *device)
     }
     if (device->mount)
     {
-        vfs_node_t *node = vfs_create_device(device->mount, device);
+        vfs_node_t *node = devfs_mount(device->mount, device);
         if (!node)
         {
             log(

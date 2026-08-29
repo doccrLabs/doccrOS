@@ -7,9 +7,11 @@
 // FILE: .sulfd
 //
 
-var desktop = ("/system/desktop/desktop.elf")
-var welcome = ("/system/desktop/welcome.elf")
-var login   = ("/system/desktop/login.elf")
+var gui = 1
+
+var desktop = ("/users/pc/applications/desktop/desktop.elf")
+var welcome = ("/users/pc/applications/desktop/welcome.elf")
+var login   = ("/users/pc/applications/desktop/login.elf")
 
 print(
     "=> succesfully jumped into userspace... yay :3"
@@ -17,13 +19,16 @@ print(
 
 wait 5
 
-if desktop
+if gui == 1
     exec desktop
+
+    wait  15 // after desktop has succesfully loaded
+
     exec login
 ef
     var x1 = ("/system/x1.elf")
     print(
-        ":: warning gui not active"
+        ":: warning gui not activated"
     )
     exec x1
 fi

@@ -58,4 +58,9 @@ typedef struct {
     uint8_t modifiers;
 } input_event_t;
 
+#define INPUT_MOD_SHIFT (1 << 0)
+#define INPUT_MOD_CTRL (1 << 1)
+#define INPUT_MOD_ALT (1 << 2)
+#define INPUT_MOD_CAPS (1 << 3)
+
 #endif

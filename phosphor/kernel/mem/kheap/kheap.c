@@ -19,7 +19,7 @@ typedef struct kheap_block {
     struct kheap_block* next;
     struct kheap_block* prev;
     u8 used;
-} kheap_block_t;
+} __attribute__((aligned(16))) kheap_block_t;
 
 static kheap_block_t *kheap_start = NULL;
 
@@ -76,7 +76,7 @@ void kheap_init(void) {
 u64 *kmalloc(u64 size) {
     if (size == 0) return NULL;
 
-    size = (size + 7) & ~7;
+    size = (size + 15) & ~15UL;
 
     u64 saved_flags;
     __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");

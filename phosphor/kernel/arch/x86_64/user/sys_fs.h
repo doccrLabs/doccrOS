@@ -27,5 +27,6 @@ void sys_getdents(cpu_state_t *state);
 void sys_mkdir(cpu_state_t *state);
 void sys_unlink(cpu_state_t *state);
 void sys_ftruncate(cpu_state_t *state);
+void sys_rename(cpu_state_t *state);
 
 #endif

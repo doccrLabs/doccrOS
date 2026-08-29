@@ -9,6 +9,8 @@
  */
 
 #include <kernel/arch/hal/cpu.h>
+#include <kernel/arch/x86_64/fpu/fpu.h>
+#include "fpu/fpu.h"
 #include "gdt/gdt.h"
 #include "idt/idt.h"
 #include "exceptions/irq.h"
@@ -31,4 +33,5 @@ void cpu_early_init(void)
     gdt_init();
     idt_init();
     cpu_enable_sse();
+    fpu_enable();
 }
