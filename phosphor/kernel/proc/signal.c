@@ -17,6 +17,8 @@
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
 #include <kernel/arch/hal/irqflags.h>
+#include <kernel/arch/x86_64/user/ptr.h>
+#include <kernel/arch/x86_64/exceptions/panic.h>
 #include <kernel/communication/serial.h>
 
 
@@ -147,6 +149,8 @@ static int copy_to_user(
     u64 len
 )
 {
+    if (!user_range_ok(uaddr, len)) return -1;
+
     u64 hhdm = paging_get_hhdm_offset();
     u64 va = uaddr;
     u64 remaining = len;
@@ -161,6 +165,7 @@ static int copy_to_user(
         u8 *dest = (u8 *)(phys + hhdm + page_off);
         u64 chunk = 4096 - page_off;
 
+        if (!phys) return -1;
         if (chunk > remaining) chunk = remaining;
 
         memcpy(dest, src, chunk);
@@ -364,6 +369,15 @@ void sys_sigreturn_impl(cpu_state_t *state)
     }
 
     u64 frame_ptr = state->rdi;
+    if (
+        !user_range_ok(
+            frame_ptr,
+            sizeof(sigframe_t)
+        )
+    ) {
+        state->rax = (u64)-1;
+        return;
+    }
 
     sigframe_t frame;
 

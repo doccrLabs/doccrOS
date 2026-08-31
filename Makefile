@@ -101,7 +101,7 @@ $(ISO): limine.conf $(LIMINE_TOOL) doom-wad-check build_num $(BUILD_DIR)/kernel.
 	@cp $(USERSPACE_DIR)/apps/welcome/welcome.elf $(DISK_DIR)/rdh/user_id/applications
 	@cp $(USERSPACE_DIR)/apps/login/login.elf $(DISK_DIR)/rdh/user_id/applications
 	@cp $(USERSPACE_DIR)/apps/gears/gears.elf $(DISK_DIR)/rdh/user_id/applications
-#@cp $(USERSPACE_DIR)/apps/doomgeneric/doomgeneric.elf $(DISK_DIR)/rdh/user_id/applications/
+	@cp $(USERSPACE_DIR)/apps/doomgeneric/doomgeneric.elf $(DISK_DIR)/rdh/user_id/applications/
 	@cp $(USERSPACE_DIR)/apps/terminal/terminal.elf $(DISK_DIR)/rdh/user_id/applications
 
 	@cp "$(DOOM_WAD)" $(DISK_DIR)/rd/doom1.wad

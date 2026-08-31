@@ -270,10 +270,22 @@ vmm_space_t *vmm_get_kernel_space(void)
 static u64 flags_to_pte(u32 flags)
 {
     u64 pte = PTE_PRESENT;
-    if (flags & VMM_REGION_WRITE)  pte |= PTE_WRITABLE;
-    if (flags & VMM_REGION_USER)   pte |= PTE_USER;
-    /* Do not set PTE_NO_EXEC (NX bit) to prevent false instruction-fetch page faults */
+    if (flags & VMM_REGION_WRITE) pte |= PTE_WRITABLE;
+    if (flags & VMM_REGION_USER) pte |= PTE_USER;
+    if (!(flags & VMM_REGION_EXEC)) pte |= PTE_NO_EXEC;
     return pte;
+}
+static int space_range_overlaps(vmm_space_t *space, u64 base, u64 size)
+{
+    u64 end = base + size;
+
+    for (vmm_region_t *cur = space->regions; cur; cur = cur->next)
+    {
+        u64 cur_end = cur->base + cur->size;
+        if (!(cur_end <= base || cur->base >= end)) return 1;
+    }
+
+    return 0;
 }
 
 u64 vmm_space_alloc(vmm_space_t *space, u64 vaddr, u64 page_count, u32 flags)
@@ -282,11 +294,19 @@ u64 vmm_space_alloc(vmm_space_t *space, u64 vaddr, u64 page_count, u32 flags)
 
     vaddr = PAGE_ALIGN_DOWN(vaddr);
     u64 size = page_count * PAGE_SIZE;
+    if (space_range_overlaps(space, vaddr, size)) return 0;
 
     vmm_region_t *node = region_alloc();
     if (!node) return 0;
 
     u64 pte_flags = flags_to_pte(flags);
+
+    if (
+        (flags & VMM_REGION_WRITE) &&
+        (flags & VMM_REGION_EXEC)
+    ) {
+        flags &= ~VMM_REGION_EXEC;
+    }
 
     for (u64 i = 0; i < page_count; i++)
     {
@@ -393,7 +413,6 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
                     continue;
                 }
                 if (pd->entries[pd_idx] & PTE_HUGE) {
-                    // 2MB huge page, do not dereference as a page table pointer!
                     if (!is_mmio) {
                         u64 phys = pd->entries[pd_idx] & 0x000FFFFFFFFFF000;
                         u32 rc = physmem_frame_rc_dec_and_get(phys);
@@ -404,6 +423,39 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
                     }
                     pd->entries[pd_idx] = 0;
                     __asm__ volatile("invlpg (%0)" : : "r"(va) : "memory");
+
+                    u8 pd_empty = 1;
+                    for (u64 k = 0; k < 512; k++)
+                    {
+                        if (pd->entries[k] & PTE_PRESENT)
+                        {
+                            pd_empty = 0;
+                            break;
+                        }
+                    }
+                    if (pd_empty)
+                    {
+                        u64 pd_phys = pdpt->entries[pdp_idx] & 0x000FFFFFFFFFF000;
+                        pdpt->entries[pdp_idx] = 0;
+
+                        physmem_free_to(pd_phys, 1);
+
+                        u8 pdpt_empty = 1;
+                        for (u64 k = 0; k < 512; k++)
+                        {
+                            if (pdpt->entries[k] & PTE_PRESENT)
+                            {
+                                pdpt_empty = 0;
+                                break;
+                            }
+                        }
+                        if (pdpt_empty)
+                        {
+                            u64 pdpt_phys = pml4->entries[pml4_idx] & 0x000FFFFFFFFFF000;
+                            pml4->entries[pml4_idx] = 0;
+                            physmem_free_to(pdpt_phys, 1);
+                        }
+                    }
                     continue;
                 }
 
@@ -555,14 +607,28 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
             return NULL;
         }
 
-        node->base  = src_cur->base;
-        node->size  = src_cur->size;
-        node->flags = src_cur->flags;
-        node->prev  = NULL;
-        node->next  = NULL;
+        int is_mmio = (src_cur->flags & VMM_REGION_MMIO) != 0;
+        int can_cow = !is_mmio && (src_cur->flags & VMM_REGION_WRITE);
 
         u64 page_count = src_cur->size / PAGE_SIZE;
         u64 pte_flags  = flags_to_pte(node->flags);
+        node->base = src_cur->base;
+        node->size = src_cur->size;
+
+        if (can_cow)
+        {
+            node->flags =
+                (src_cur->flags & ~VMM_REGION_WRITE) |
+                VMM_REGION_COW
+            ;
+        }
+        else
+        {
+            node->flags = src_cur->flags;
+        }
+
+        node->prev = NULL;
+        node->next = NULL;
 
         vmm_region_t *prev = NULL;
         vmm_region_t *cur  = dst->regions;
@@ -586,28 +652,62 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
             u64 phys = pte_lookup(src, va);
             if (!phys)
             {
-                region_free(node);
+                //region_free(node);
                 __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
                 vmm_space_destroy(dst);
                 return NULL;
             }
 
-            if (src_cur->flags & VMM_REGION_MMIO)
+            if (is_mmio)
             {
                 paging_map_page_in(dst->pml4_phys, va, phys, pte_flags);
                 continue;
             }
 
-            u64 child_phys = physmem_alloc_to(1);
-            if (!child_phys)
+            if (can_cow)
             {
-                __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
-                vmm_space_destroy(dst);
-                return NULL;
+                physmem_frame_rc_inc(phys);
+
+                paging_map_page_in(
+                    dst->pml4_phys,
+                    va,
+                    phys,
+                    pte_flags
+                );
+
+                paging_map_page_in(
+                    src->pml4_phys,
+                    va,
+                    phys,
+                    pte_flags
+                );
+
+                __asm__ volatile(
+                    "invlpg (%0)"
+                    :
+                    : "r"(va)
+                    : "memory"
+                );
+
+                continue;
             }
 
-            memcpy((void *)(child_phys + hhdm), (const void *)(phys + hhdm), PAGE_SIZE);
-            paging_map_page_in(dst->pml4_phys, va, child_phys, pte_flags);
+            physmem_frame_rc_inc(phys);
+
+            paging_map_page_in(
+                dst->pml4_phys,
+                va,
+                phys,
+                pte_flags
+            );
+        }
+
+        if (can_cow)
+        {
+            src_cur->flags =
+                (src_cur->flags & ~VMM_REGION_WRITE) |
+                VMM_REGION_COW
+            ;
         }
 
         src_cur = src_cur->next;

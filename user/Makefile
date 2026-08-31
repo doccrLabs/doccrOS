@@ -23,7 +23,7 @@ all:
 	@$(MAKE) -C apps/welcome
 	@$(MAKE) -C apps/login
 	@$(MAKE) -C apps/gears
-#@$(MAKE) -C apps/doomgeneric ## desktop doom
+	@$(MAKE) -C apps/doomgeneric ## desktop doom
 	@$(MAKE) -C apps/terminal
 
 clean:

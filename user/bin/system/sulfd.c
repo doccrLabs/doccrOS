@@ -39,10 +39,10 @@ int main(void)
     printf("renaming %s to %s... \n", USERFIRST, NAMEAFTER);
     if (rename(USERFIRST, NAMEAFTER) < 0) return 1;
 
-    #define SRC_CPIO "/system/s4.cpio"
-    #define DEST_DIR "/system/desktop/resources/"
+    #define SRC_CPIO "/users/pc/extend/s4.cpio"
+    #define DEST_DIR "/users/pc/applications/desktop/resources/"
 
-    printf("unzipping %s to %s...\n", SRC_CPIO, DEST_DIR);
+    printf("unzipping %s to %s ...\n", SRC_CPIO, DEST_DIR);
 
     if (cpio_extract_file(SRC_CPIO, DEST_DIR, &stats) != 0)
     {

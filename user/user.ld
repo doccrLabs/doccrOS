@@ -14,7 +14,8 @@ OUTPUT_ARCH(i386:x86-64)
 ENTRY(_start)
 
 PHDRS {
-	load PT_LOAD FLAGS(7);
+	text PT_LOAD FLAGS(5); /*  R+X   */
+	data PT_LOAD FLAGS(6); /*  R+W   */
 }
 
 SECTIONS
@@ -25,23 +26,21 @@ SECTIONS
     {
 	    *(.text._start)
 	    *(.text*)
-    } :load
-
-    .rodata :
-    {
 	    *(.rodata*)
-    } :load
+    } :text
+
+    . = ALIGN(4096);
 
     .data :
     {
 	    *(.data*)
-    } :load
+    } :data
 
     .bss :
     {
 	    *(.bss*)
 	    *(COMMON)
-    } :load
+    } :data
 
     /DISCARD/ :
     {

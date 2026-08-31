@@ -37,6 +37,14 @@ int user_ptr_ok(u64 ptr)
     return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
 }
 
+int user_range_ok(u64 ptr, u64 len)
+{
+    if (ptr == 0 || len == 0) return 0;
+    if (ptr > 0x00007FFFFFFFFFFFULL) return 0;
+    if (len > 0x00007FFFFFFFFFFFULL - ptr) return 0;
+    return 1;
+}
+
 static inline void wrmsr(u32 msr, u64 val)
 {
     __asm__ volatile(

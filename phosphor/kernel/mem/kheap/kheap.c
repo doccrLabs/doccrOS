@@ -34,7 +34,7 @@ static struct {
 static void kheap_merge_free_blocks(kheap_block_t *block) {
     kheap_block_t *current = block;
 
-    while (current->next && !current->next->used) {
+    while (current->next && current->next->magic == BLOCK_MAGIC && !current->next->used) {
         current->size += sizeof(kheap_block_t) + current->next->size;
         current->next = current->next->next;
         if (current->next) {
@@ -45,7 +45,7 @@ static void kheap_merge_free_blocks(kheap_block_t *block) {
     }
 
     current = block;
-    while (current->prev && !current->prev->used) {
+    while (current->prev && current->prev->magic == BLOCK_MAGIC && !current->prev->used) {
         kheap_block_t *prev = current->prev;
         prev->size += sizeof(kheap_block_t) + current->size;
         prev->next = current->next;
@@ -75,7 +75,7 @@ void kheap_init(void) {
 
 u64 *kmalloc(u64 size) {
     if (size == 0) return NULL;
-
+    if (size > (u64)-1 - 15) return NULL;
     size = (size + 15) & ~15UL;
 
     u64 saved_flags;
@@ -133,6 +133,12 @@ u64 *kmalloc(u64 size) {
 void kfree(u64 *ptr) {
   if (ptr == NULL) return;
 
+  u64 heap_lo = (u64)kheap_start;
+  u64 heap_hi = heap_lo + HEAP_SIZE;
+  u64 p = (u64)ptr;
+
+  if (p < heap_lo + sizeof(kheap_block_t) || p >= heap_hi) return;
+
   u64 saved_flags;
   __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
 
@@ -182,6 +188,8 @@ u64 kheap_get_used_block_count(void) {
 }
 
 u64 *kcalloc(u64 count, u64 size) {
+    if (count == 0 || size == 0) return NULL;
+    if (count > (u64)-1 / size) return NULL;
     u64 total = count * size;
     u64 *ptr = kmalloc(total);
     if (ptr) memset(ptr, 0, total);

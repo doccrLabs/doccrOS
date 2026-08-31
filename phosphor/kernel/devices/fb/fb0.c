@@ -13,7 +13,7 @@
 
 #include <kernel/devices/vt/vt.h>
 #include <kernel/screen/graphics.h>
-#include <kernel/screen/bootscreen/boot.h>
+//#include <kernel/screen/bootscreen/boot.h>
 #include <kernel/screen/lib/log.h>
 #include <kernel/proc/process.h>
 #include <kernel/mem/meminclude.h>
@@ -30,12 +30,12 @@ typedef struct fb_handle
 static int fb0_dev_init(void)
 {
     if (
-    	!bs.Screens[BS3].pixels ||
-     	!bs.Screens[BS3].pixels_phys
+    	!get_framebuffer() ||
+     	!get_fb_phys_addr()
     ){
         log(
         	"[FB]",
-         	"fb0 init skipped, BS3 backbuffer not ready yet\n",
+         	"fb0 init skipped, hardware framebuffer not ready yet\n",
           	warning
         );
         return -1;
@@ -49,11 +49,10 @@ static void *fb0_open(const char *path)
 {
     (void)path;
 
-    // no backbuffer, no device,
-    //
-    if (!bs.Screens[BS3].pixels || !bs.Screens[BS3].pixels_phys)
+    // no framebuffer, no device,
+    if (!get_framebuffer() || !get_fb_phys_addr())
     {
-        log("[FB]", "fb0 open rejected, BS3 backbuffer not ready\n", warning);
+        log("[FB]", "fb0 open rejected, hardware framebuffer not ready\n", warning);
         return NULL;
     }
 
@@ -79,11 +78,11 @@ static void fb0_close(void *handle)
     fb_handle_t *h = (fb_handle_t *)handle;
     if (!h) return;
 
-    proc_t *p = process_get_current();
+    //proc_t *p = process_get_current();
     // dont leave the mapping aftr close
-    if (h->mapped && p && p->space)
+    if (h->mapped && h->owner && h->owner->space)
     {
-        vmm_unmap_phys(p->space, h->vaddr);
+        vmm_unmap_phys(h->owner->space, h->vaddr);
     }
 
     kfree((u64 *)h);
@@ -138,10 +137,10 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
                 return 0;
             }
 
-            u64 phys = bs.Screens[BS3].pixels_phys;
+            u64 phys = get_fb_phys_addr();
             if (!phys) return -1;
 
-            u64 size       = get_fb_pitch() * get_fb_height();
+            u64 size = get_fb_size();
             u64 page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
             u64 vaddr = vmm_map_phys(
@@ -173,35 +172,9 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
         }
 
         case FB_IOCTL_FLUSH:
-            bs.Flush(BS3);
             return 0;
         case FB_IOCTL_FLUSH_RECT:
-        {
-            if (!arg) return -1;
-            fb_rect_t rect = *(fb_rect_t *)arg;
-            bs_screen_t *scr = &bs.Screens[BS3];
-            u32 *dst = get_framebuffer();
-            if (
-                !dst ||
-                !scr->pixels ||
-                rect.x >= scr->width ||
-                rect.y >= scr->height
-            ) return -1;
-
-            if (rect.width > scr->width - rect.x) rect.width = scr->width - rect.x;
-            if (rect.height > scr->height - rect.y) rect.height = scr->height - rect.y;
-
-            u32 dst_stride = get_fb_pitch() / sizeof(u32);
-            for (u32 y = 0; y < rect.height; y++)
-            {
-                memcpy(
-                    &dst[(rect.y + y) * dst_stride + rect.x],
-                    &scr->pixels[(rect.y + y) * scr->width + rect.x],
-                    rect.width * sizeof(u32)
-                );
-            }
             return 0;
-        }
 
         case FB_IOCTL_VT_ENABLE:
             vt_screen_set_enabled(1);

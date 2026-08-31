@@ -36,6 +36,24 @@ static void cpuid_ext(u32 code, u32 subcode, u32 *a, u32 *b, u32 *c, u32 *d)
     ;
 }
 
+void cpu_enable_nx(void)
+{
+    if (!cpu_get_info()->has_nx) {
+        log("[CPU]", "NX not supported, W^X not used\n", warning);
+        return;
+    }
+    u32 lo;
+    u32 hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(MSR_EFER_ADDR));
+
+    u64 efer = ((u64)hi << 32) | lo;
+    efer |= EFER_NXE;
+
+    __asm__ volatile("wrmsr" :: "c"(MSR_EFER_ADDR), "a"((u32)efer), "d"((u32)(efer >> 32)));
+
+    log("[CPU]", "NX (EFER.NXE) active\n", success);
+}
+
 void cpu_detect(void)
 {
     memset(&cpu_info, 0, sizeof(cpu_info_t));
@@ -90,6 +108,8 @@ void cpu_detect(void)
         cpu_info.extended_features_ebx = ebx;
         cpu_info.extended_features_ecx = ecx;
     }
+    cpuid(0x80000001, &eax, &ebx, &ecx, &edx);
+    cpu_info.has_nx = (edx & (1 << 20)) != 0;
     /*
         cpuid(0, &eax, &ebx, &ecx, &edx);
         if (eax >= 7) {

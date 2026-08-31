@@ -17,6 +17,7 @@
 #include <kernel/arch/x86_64/gdt/gdt.h>
 #include <kernel/arch/x86_64/user/syscall.h>
 #include <kernel/arch/x86_64/fpu/fpu.h>
+#include <kernel/arch/x86_64/exceptions/panic.h>
 
 #define QUANTUM 2
 
@@ -213,6 +214,11 @@ void sched_yield(void) {
     }
 
     if (next == prev) { prev->state = THREAD_RUNNING; return; }
+
+    if (prev->stack_base && *(u64 *)prev->stack_base != STACK_CANARY)
+    {
+        panic("kernel stack overflow detected");
+    }
 
     switch_count++;
     /*

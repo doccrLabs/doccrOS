@@ -10,8 +10,8 @@
 var gui = 1
 
 var desktop = ("/users/pc/applications/desktop/desktop.elf")
-var welcome = ("/users/pc/applications/desktop/welcome.elf")
-var login   = ("/users/pc/applications/desktop/login.elf")
+var welcome = ("/users/pc/applications/welcome.elf")
+var login   = ("/users/pc/applications/login.elf")
 
 print(
     "=> succesfully jumped into userspace... yay :3"
@@ -26,7 +26,7 @@ if gui == 1
 
     exec login
 ef
-    var x1 = ("/system/x1.elf")
+    var x1 = ("/system/bin/x1.elf")
     print(
         ":: warning gui not activated"
     )

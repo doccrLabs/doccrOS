@@ -13,8 +13,9 @@
 
 #include <types.h>
 
-#define     THREAD_STACK_SIZE 16384
-#define     THREAD_NAME_MAX      32
+#define THREAD_STACK_SIZE 16384
+#define THREAD_NAME_MAX      32
+#define STACK_CANARY  0xDEADC0DEDEADC0DEULL
 
 typedef enum
 {

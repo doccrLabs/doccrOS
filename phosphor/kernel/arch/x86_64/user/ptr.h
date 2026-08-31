@@ -11,3 +11,4 @@
 #pragma once
 
 int user_ptr_ok(u64 ptr);
+int user_range_ok(u64 ptr, u64 len);

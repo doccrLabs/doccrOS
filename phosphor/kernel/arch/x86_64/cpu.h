@@ -62,6 +62,10 @@
 #define CPU_FEATURE_BMI2    (1 << 8)
 #define CPU_FEATURE_AVX512F (1 << 16)
 
+#define MSR_EFER_ADDR 0xC0000080
+#define EFER_NXE (1ULL << 11)
+
+
 typedef struct {
     char vendor[13];
     char brand[49];

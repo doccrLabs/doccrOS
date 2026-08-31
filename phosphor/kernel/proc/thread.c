@@ -52,6 +52,7 @@ thread_t *thread_create(proc_t *owner, const char *name, thread_entry_t entry, v
         kfree((u64 *)t);
         return NULL;
     }
+    *(u64 *)stack = STACK_CANARY;
 
     t->tid            = next_tid++;
     t->state          = THREAD_READY;
@@ -120,6 +121,7 @@ thread_t *thread_create_user(
         kfree((u64 *)t);
         return NULL;
     }
+    *(u64 *)kstack = STACK_CANARY;
 
     t->tid            = next_tid++;
     t->state          = THREAD_READY;

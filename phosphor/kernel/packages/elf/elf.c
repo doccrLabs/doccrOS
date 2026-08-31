@@ -73,12 +73,13 @@ static int elf_check(const u8 *data, u64 size)
         return -1;
     }
 
-    u64 ph_end = eh->e_phoff + (u64)eh->e_phnum * eh->e_phentsize;
-    if (ph_end > size)
-    {
-        printf("[ELF] phdrs out of bounds\n");
-        return -1;
-    }
+    if (eh->e_phnum == 0) return -1;
+
+    u64 phentsize = eh->e_phentsize;
+    u64 phnum = eh->e_phnum;
+    if (phentsize != 0 && phnum > (u64)-1 / phentsize) return -1;
+    u64 ph_table_size = phnum * phentsize;
+    if (eh->e_phoff > size || ph_table_size > size - eh->e_phoff) return -1;
 
     return 0;
 }
@@ -103,6 +104,7 @@ static int elf_map_segments_and_stack(
         const elf64_phdr_t *ph = (const elf64_phdr_t *)(data + eh->e_phoff + (u64)i * eh->e_phentsize);
 
         if (ph->p_type != PT_LOAD) continue;
+        if (ph->p_memsz == 0) continue;
         if (ph->p_offset + ph->p_filesz > size) return -1;
         if (ph->p_memsz < ph->p_filesz) return -1;
 
@@ -474,6 +476,7 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
         const elf64_phdr_t *ph = (const elf64_phdr_t *)(data + eh->e_phoff + (u64)i * eh->e_phentsize);
 
         if (ph->p_type != PT_LOAD) continue;
+        if (ph->p_memsz == 0) continue;
 
         #if DEBUGINFO
             printf(
@@ -517,6 +520,38 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
 
         if (ph->p_flags & PF_W) vmm_flags |= VMM_REGION_WRITE;
         if (ph->p_flags & PF_X) vmm_flags |= VMM_REGION_EXEC;
+
+        if (ph->p_offset > size || ph->p_filesz > size - ph->p_offset)
+        {
+            process_destroy(p);
+            return -1;
+        }
+
+        if (ph->p_memsz < ph->p_filesz)
+        {
+            process_destroy(p);
+            return -1;
+        }
+
+        if (ph->p_vaddr > (u64)-1 - ph->p_memsz)
+        {
+            process_destroy(p);
+            return -1;
+        }
+
+        u64 seg_end = ph->p_vaddr + ph->p_memsz;
+        if (ph->p_vaddr >= 0x0000800000000000ULL || seg_end > 0x0000800000000000ULL)
+        {
+            process_destroy(p);
+            return -1;
+        }
+
+        if ((ph->p_flags & PF_W) && (ph->p_flags & PF_X))
+        {
+            printf("[ELF] seg %u: W^X kill\n", (u32)i);
+            process_destroy(p);
+            return -1;
+        }
 
         u64 mapped = vmm_space_alloc(p->space, va_base, pg_count, vmm_flags);
         if (!mapped)
@@ -575,6 +610,30 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
         #if DEBUGINFO
             printf("[ELF] seg %u mapped va=0x%llx pages=%llu\n", (u32)i, va_base, pg_count);
         #endif
+    }
+
+    int entry_ok = 0;
+
+    for (u16 i = 0; i < eh->e_phnum; i++)
+    {
+        const elf64_phdr_t *ph = (const elf64_phdr_t *)(data + eh->e_phoff + (u64)i * eh->e_phentsize);
+
+        if (ph->p_type != PT_LOAD || !(ph->p_flags & PF_X)) continue;
+        if (ph->p_memsz == 0) continue;
+        if (
+            eh->e_entry >= ph->p_vaddr &&
+            eh->e_entry < ph->p_vaddr + ph->p_memsz
+        ) {
+            entry_ok = 1;
+            break;
+        }
+    }
+
+    if (!entry_ok)
+    {
+        printf("[ELF] entry point not in PT_LOAD/X \n");
+        process_destroy(p);
+        return -1;
     }
 
     u64 stack = vmm_space_alloc(
